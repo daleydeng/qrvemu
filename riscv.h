@@ -1,5 +1,6 @@
 #include <stdint.h>
 #include <stdbool.h>
+#include <assert.h>
 
 typedef uint32_t word_t;
 typedef uint32_t inst_t;
@@ -118,6 +119,39 @@ struct inst {
 			word_t rd:5;
 			word_t funct3:3;
 		} v;
+		
+		struct {
+			word_t opcode:7;
+			word_t rd:5;
+			word_t funct3:3;
+			word_t rs1:5;
+			word_t imm:12;
+		} I;
+
+		struct {
+			word_t opcode:7;
+			word_t imm_11:1;
+			word_t imm_1_4:4;
+			word_t funct3:3;
+			word_t rs1:5;
+			word_t rs2:5;
+			word_t imm_5_10:6;
+			word_t imm_12:1;
+		} B;
+
+		struct {
+			word_t opcode:7;
+			word_t rd:5;
+			word_t imm:20;
+		} U;
+		struct {
+			word_t opcode:7;
+			word_t rd:5;
+			word_t imm_12_19:8;
+			word_t imm_11:1;
+			word_t imm_1_10:10;
+			word_t imm_20:1;
+		} J;
 		struct {
 			word_t opcode:7;
 			word_t rd:5;
@@ -142,6 +176,10 @@ struct inst {
 		} Zicsr;
 	};
 } __attribute__((packed));
+
+static inline word_t sign_ext(word_t imm, int size) {
+	return get_bit(imm, size-1) ? imm | ((1 << (XLEN - size)) - 1) << size : imm;
+}
 
 struct rvcore_rv32ima {
 	uint32_t regs[32];
@@ -171,6 +209,15 @@ struct rvcore_rv32ima {
 	word_t misa;
 	
 } __attribute__((aligned(ALIGN)));
+
+static inline void write_rd(struct rvcore_rv32ima *core, int rd, word_t val)
+{
+	if (rd) {
+		assert(rd < XLEN);
+		core->regs[rd] = val;
+	}
+		
+}
 
 struct system {
     struct rvcore_rv32ima *core;

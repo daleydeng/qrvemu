@@ -140,7 +140,7 @@ int main(int argc, char **argv)
 	sys_alloc_memory(sys, RAM_BASE, RAM_SIZE);
 	sys->read_csr = read_other_csr;
 	sys->write_csr = write_other_csr;
-	
+
 	long flen = 0;
 	size_t dtb_len = 0;
 
