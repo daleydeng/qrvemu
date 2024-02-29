@@ -214,19 +214,6 @@ restart: {
 			0; // dtb_pa (Must be valid pointer) (Should be pointer to dtb)
 	core->extraflags |= 3; // Machine-mode.
 
-	if (dtb_file_name == 0) {
-		// Update system ram size in DTB (but if and only if we're using the default
-		// DTB) Warning - this will need to be updated if the skeleton DTB is ever
-		// modified.
-		uint32_t *dtb = (uint32_t *)(ram_image + dtb_ptr);
-		if (dtb[0x13c / 4] == 0x00c0ff03) {
-			uint32_t validram = dtb_ptr;
-			dtb[0x13c / 4] = (validram >> 24) |
-					 (((validram >> 16) & 0xff) << 8) |
-					 (((validram >> 8) & 0xff) << 16) |
-					 ((validram & 0xff) << 24);
-		}
-	}
 
 	// Image is loaded.
 	uint64_t rt;
