@@ -176,7 +176,9 @@ struct MiniRV32IMAState {
 	// Bit 3+ = Load/Store reservation LSBs.
 	uint32_t extraflags;
 
+	enum priv priv;
 	bool wfi;
+	word_t reservation;
 	
 } __attribute__((aligned(ALIGN)));
 
@@ -204,7 +206,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 
 	// Handle Timer interrupt.
 	if (!dword_is_zero(state->timermatch) && dword_cmp(state->timer, state->timermatch)) {
-		CSR(extraflags) &= ~4; // Clear WFI
+		state->wfi = false;
 		CSR(mip) |=
 			1
 			<< 7; //MTIP of MIP // https://stackoverflow.com/a/61916199/2926815  Fire interrupt.
@@ -212,8 +214,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 		CSR(mip) &= ~(1 << 7);
 	}
 
-	// If WFI, don't run processor.
-	if (CSR(extraflags) & 4)
+	if (state->wfi)
 		return 1;
 
 	uint32_t trap = 0;
@@ -714,8 +715,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						{
 							CSR(mstatus) |=
 								8; //Enable interrupts
-							CSR(extraflags) |=
-								4; //Infor environment we want to go to sleep.
+							state->wfi = true;
 							SETCSR(pc, pc + 4);
 							return 1;
 						} else if (((csrno & 0xff) ==
@@ -732,21 +732,24 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 							       ((startmstatus &
 								 0x80) >>
 								4) |
-								       ((startextraflags &
-									 3)
+								       (state->priv
 									<< 11) |
 								       0x80);
-							SETCSR(extraflags,
-							       (startextraflags &
-								~3) | ((startmstatus >>
+
+							state->priv = ((startmstatus >>
 									11) &
-								       3));
+								       3);
+
+							// SETCSR(extraflags,
+							//        (startextraflags &
+							// 	~3) | ((startmstatus >>
+							// 		11) &
+							// 	       3));
 							pc = CSR(mepc) - 4;
 						} else {
 							switch (csrno) {
 							case 0:
-								trap = (CSR(extraflags) &
-									3) ?
+								trap = (state->priv == PRIV_MACHINE) ?
 									       (11 +
 										1) :
 									       (8 +
@@ -788,16 +791,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						switch (irmid) {
 						case 2: //LR.W (0b00010)
 							dowrite = 0;
-							CSR(extraflags) =
-								(CSR(extraflags) &
-								 0x07) |
-								(rs1 << 3);
+							state->reservation = rs1;
 							break;
 						case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
-							rval = (CSR(extraflags) >>
-									3 !=
-								(rs1 &
-								 0x1fffffff)); // Validate that our reservation slot is OK.
+							rval = state->reservation != rs1;
 							dowrite =
 								!rval; // Only write if slot is valid.
 							break;
@@ -885,11 +882,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 		//CSR( mstatus ) & 8 = MIE, & 0x80 = MPIE
 		// On an interrupt, the system moves current MIE into MPIE
 		SETCSR(mstatus, ((CSR(mstatus) & 0x08) << 4) |
-					((CSR(extraflags) & 3) << 11));
+					(state->priv << 11));
 		pc = (CSR(mtvec) - 4);
 
 		// If trapping, always enter machine mode.
-		CSR(extraflags) |= 3;
+		state->priv = PRIV_MACHINE;
 
 		trap = 0;
 		pc += 4;

@@ -198,7 +198,7 @@ restart:
 	core.pc = sys.ram_base;
 	core.regs[R_a0] = 0x00; // hart ID
 	core.regs[R_a1] = sys.ram_base + sys.ram_size - dtb_len;
-	core.extraflags |= 3; // Machine-mode.
+	core.priv = PRIV_MACHINE; // Machine-mode.
 
 	// Image is loaded.
 	uint64_t rt;
