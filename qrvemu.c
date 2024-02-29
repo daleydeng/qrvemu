@@ -3,7 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include "utils.h"
 
 int fail_on_all_faults = 0;
 
@@ -44,13 +43,12 @@ static int ReadKBByte();
 	value = HandleOtherCSRRead(image, csrno);
 
 #include "riscv1.h"
+#include "utils.h"
 
 size_t RAM_BASE = 0x80000000;
 size_t RAM_SIZE = 64 * 1024 * 1024;
 
 struct system *sys = NULL;
-
-static void dump_sys(struct system *sys);
 
 int main(int argc, char **argv)
 {
@@ -397,29 +395,4 @@ static int64_t SimpleReadNumberInt(const char *number, int64_t defaultNumber)
 	} else {
 		return ret;
 	}
-}
-
-static void dump_sys(struct system *sys)
-{
-	uint32_t pc = sys->core->pc;
-	uint32_t pc_offset = pc - sys->ram_base;
-	uint32_t ir = 0;
-
-	printf("PC: %08x ", pc);
-	if (pc_offset >= 0 && pc_offset < sys->ram_size - 3) {
-		ir = *((uint32_t *)(&((uint8_t *)sys->image)[pc_offset]));
-		printf("[0x%08x] ", ir);
-	} else
-		printf("[xxxxxxxxxx] ");
-	uint32_t *regs = sys->core->regs;
-	printf("Z:%08x ra:%08x sp:%08x gp:%08x tp:%08x t0:%08x t1:%08x t2:%08x "
-	       "s0:%08x s1:%08x a0:%08x a1:%08x a2:%08x a3:%08x a4:%08x a5:%08x ",
-	       regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6],
-	       regs[7], regs[8], regs[9], regs[10], regs[11], regs[12],
-	       regs[13], regs[14], regs[15]);
-	printf("a6:%08x a7:%08x s2:%08x s3:%08x s4:%08x s5:%08x s6:%08x s7:%08x "
-	       "s8:%08x s9:%08x s10:%08x s11:%08x t3:%08x t4:%08x t5:%08x t6:%08x\n",
-	       regs[16], regs[17], regs[18], regs[19], regs[20], regs[21],
-	       regs[22], regs[23], regs[24], regs[25], regs[26], regs[27],
-	       regs[28], regs[29], regs[30], regs[31]);
 }

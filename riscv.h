@@ -186,3 +186,4 @@ static inline word_t sys_ram_end(struct system *sys) {
 }
 
 void sys_alloc_memory(struct system *sys, word_t base, word_t size);
+void dump_sys(struct system *sys);

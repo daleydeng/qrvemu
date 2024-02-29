@@ -6,7 +6,6 @@
 #define _RISCV_H
 
 #include <stdint.h>
-#include "riscv.h"
 
 #ifndef MINIRV32_POSTEXEC
 #define MINIRV32_POSTEXEC(...) ;
@@ -39,6 +38,7 @@
 #define MINIRV32_LOAD1_SIGNED(ofs) *(int8_t *)(image + ofs)
 #endif
 
+#include "riscv.h"
 
 int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *state, uint8_t *image,
 			uint32_t vProcAddress, uint32_t elapsedUs, int count);
