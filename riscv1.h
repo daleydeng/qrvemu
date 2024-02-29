@@ -451,28 +451,12 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 							proc_inst_wfi(core, inst);
 							core->pc = pc + 4;
 							return 1;
-							
+
 						} else if (((csrno & 0xff) == 0x02)) // MRET
 						{
-							//https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
-							//Table 7.6. MRET then in mstatus/mstatush sets MPV=0, MPP=0, MIE=MPIE, and MPIE=1. La
-							// Should also update mstatus to reflect correct mode.
-							uint32_t startmstatus =
-								CSR(mstatus);
-							SETCSR(mstatus,
-							       ((startmstatus &
-								 0x80) >>
-								4) |
-								       (core->priv
-									<< 11) |
-								       0x80);
-
-							core->priv =
-								((startmstatus >>
-								  11) &
-								 3);
-
-							pc = CSR(mepc) - 4;
+							proc_inst_mret(core, inst);
+							pc = core->mepc - 4;
+							
 						} else {
 							i_rd = 0;
 							switch (csrno) {

@@ -129,16 +129,24 @@ void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst)
 	core->wfi = true;
 }
 
+void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst)
+{
+	assert(inst.priv_I.imm == 0x302); // 0b0011 0000 0010
+	// refer Volume II: RISC-V Privileged Architectures V20211203 manual 8.6.4 Trap Return
+	// The MRET instruction is used to return from a trap taken into M-mode. MRET first determines
+	// what the new privilege mode will be according to the values of MPP and MPV in mstatus or
+	// mstatush, as encoded in Table 8.8. MRET then in mstatus/mstatush sets MPV=0, MPP=0,
+	// MIE=MPIE, and MPIE=1. Lastly, MRET sets the privilege mode as previously determined, and
+	// sets pc = mepc.
+
+	core->priv = get_bit2(core->mstatus, MSTATUS_MPP);
+	clear_bit2(&core->mstatus, MSTATUS_MPP);
+	copy_bit(&core->mstatus, MSTATUS_MIE, get_bit(core->mstatus, MSTATUS_MPIE));
+	set_bit(&core->mstatus, MSTATUS_MPIE);
+}
+
 // void proc_inst_priv(struct system *sys, struct inst inst)
 // {
-// 	i_rd = 0;
-// 	int csrno = inst.priv_I.imm;
-// 	if (csrno == 0x105) //WFI (Wait for interrupts)
-// 	{
-// 		CSR(mstatus) |= 8; //Enable interrupts
-// 		core->wfi = true;
-// 		SETCSR(pc, pc + 4);
-// 		return 1;
 
 // 	} else if (((csrno & 0xff) == 0x02)) // MRET
 // 	{

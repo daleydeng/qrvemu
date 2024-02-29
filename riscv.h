@@ -8,9 +8,10 @@ typedef uint32_t inst_t;
 
 #define MASK(n) ((1 << (n)) - 1)
 #define get_bit(reg, b) ((reg) & 1 << (b))
-#define get_bit2(reg, b) (((reg) << b) & 0x03)
+#define get_bit2(reg, b) (((reg) >> b) & 0x3)
 #define set_bit(reg, b) ((*(reg)) |= 1 << (b))
 #define clear_bit(reg, b) ((*(reg)) &=~ 1 << (b))
+#define clear_bit2(reg, b) ((*(reg)) &=~ 0x3 << (b))
 
 static inline void copy_bit(word_t *reg, int b, bool val)
 {
@@ -190,3 +191,4 @@ void dump_sys(struct system *sys);
 
 word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys);
 void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst);
+void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst);
