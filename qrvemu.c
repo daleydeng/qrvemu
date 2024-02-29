@@ -75,7 +75,6 @@ long load_file(void *ptr, size_t size, const char *fname, bool back_mapping)
 	if (back_mapping)
 		ptr = ptr + size - flen;
 
-	memset(ptr, 0, size);
 	if (fread(ptr, flen, 1, f) != 1) {
 		fprintf(stderr, "Error: Could not load image.\n");
 		return -7;
@@ -93,7 +92,6 @@ int main(int argc, char **argv)
 	int fixed_update = 0;
 	int do_sleep = 1;
 	int single_step = 0;
-	int dtb_ptr = 0;
 	const char *image_file_name = 0;
 	const char *dtb_file_name = 0;
 	for (i = 1; i < argc; i++) {
@@ -176,44 +174,25 @@ int main(int argc, char **argv)
 		fprintf(stderr, "Error: could not allocate system image.\n");
 		return -4;
 	}
+	memset(ram_image, 0, sys.ram_size);
 
 	long flen = 0;
-	FILE *f;
-	
-restart: {
+	size_t state_size = sizeof(struct MiniRV32IMAState);
+	size_t dtb_len = 0;
+
+restart:
 	if ((flen = load_file(ram_image, sys.ram_size, image_file_name, false)) < 0)
 		return flen;
 
-	if (dtb_file_name) {
-		if (strcmp(dtb_file_name, "disable") == 0) {
-			// No DTB reading.
-		} else {
-			f = fopen(dtb_file_name, "rb");
-			if (!f || ferror(f)) {
-				fprintf(stderr, "Error: \"%s\" not found\n",
-					dtb_file_name);
-				return -5;
-			}
-			fseek(f, 0, SEEK_END);
-			long dtblen = ftell(f);
-			fseek(f, 0, SEEK_SET);
-			dtb_ptr = sys.ram_size - dtblen -
-				  sizeof(struct MiniRV32IMAState);
-			if (fread(ram_image + dtb_ptr, dtblen, 1, f) != 1) {
-				fprintf(stderr,
-					"Error: Could not open dtb \"%s\"\n",
-					dtb_file_name);
-				return -9;
-			}
-			fclose(f);
-		}
-	} else {
+	if (!dtb_file_name) {
 		fprintf(stderr,
 			"Error: Could not open dtb \"%s\"\n",
 			dtb_file_name);
 		return -9;
 	}
-}
+
+	if ((dtb_len = load_file(ram_image, sys.ram_size - state_size, dtb_file_name, true)) < 0)
+	    return dtb_len;
 
 	CaptureKeyboardInput();
 
@@ -222,12 +201,8 @@ restart: {
 					   sizeof(struct MiniRV32IMAState));
 	core->pc = sys.ram_base;
 	core->regs[R_a0] = 0x00; // hart ID
-	core->regs[R_a1] =
-		dtb_ptr ?
-			(dtb_ptr + sys.ram_base) :
-			0; // dtb_pa (Must be valid pointer) (Should be pointer to dtb)
+	core->regs[R_a1] = sys.ram_base + sys.ram_size - dtb_len - state_size;
 	core->extraflags |= 3; // Machine-mode.
-
 
 	// Image is loaded.
 	uint64_t rt;
