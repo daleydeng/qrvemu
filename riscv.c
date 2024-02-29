@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include <stdio.h>
+#include <assert.h>
 #include "riscv.h"
 
 void sys_alloc_memory(struct system *sys, word_t base, word_t size)
@@ -14,17 +15,42 @@ void sys_alloc_memory(struct system *sys, word_t base, word_t size)
 
 }
 
-#define READ_CSR(no, name) \
-	case no: rval = sys->core->name; break;
-#define WRITE_CSR(no, name) \
-	case no: sys->core->name = write_val; break;
+void dump_sys(struct system *sys)
+{
+	uint32_t pc = sys->core->pc;
+	uint32_t pc_offset = pc - sys->ram_base;
+	uint32_t ir = 0;
 
-word_t handle_Zicsr(struct system *sys, struct inst inst) 
+	printf("PC: %08x ", pc);
+	if (pc_offset >= 0 && pc_offset < sys->ram_size - 3) {
+		ir = *((uint32_t *)(&((uint8_t *)sys->image)[pc_offset]));
+		printf("[0x%08x] ", ir);
+	} else
+		printf("[xxxxxxxxxx] ");
+	uint32_t *regs = sys->core->regs;
+	printf("Z:%08x ra:%08x sp:%08x gp:%08x tp:%08x t0:%08x t1:%08x t2:%08x "
+	       "s0:%08x s1:%08x a0:%08x a1:%08x a2:%08x a3:%08x a4:%08x a5:%08x ",
+	       regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6],
+	       regs[7], regs[8], regs[9], regs[10], regs[11], regs[12],
+	       regs[13], regs[14], regs[15]);
+	printf("a6:%08x a7:%08x s2:%08x s3:%08x s4:%08x s5:%08x s6:%08x s7:%08x "
+	       "s8:%08x s9:%08x s10:%08x s11:%08x t3:%08x t4:%08x t5:%08x t6:%08x\n",
+	       regs[16], regs[17], regs[18], regs[19], regs[20], regs[21],
+	       regs[22], regs[23], regs[24], regs[25], regs[26], regs[27],
+	       regs[28], regs[29], regs[30], regs[31]);
+}
+
+#define READ_CSR(no, name) \
+	case no: rval = core->name; break;
+#define WRITE_CSR(no, name) \
+	case no: core->name = write_val; break;
+
+word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys) 
 {
 	word_t rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
 	word_t uimm = inst.Zicsr.rs1_uimm;
-	word_t rs1 = sys->core->regs[i_rs1];
+	word_t rs1 = core->regs[i_rs1];
 	word_t write_val = rs1;
 
 	// https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
@@ -96,28 +122,61 @@ word_t handle_Zicsr(struct system *sys, struct inst inst)
 	return rval;
 }
 
-
-void dump_sys(struct system *sys)
+void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst)
 {
-	uint32_t pc = sys->core->pc;
-	uint32_t pc_offset = pc - sys->ram_base;
-	uint32_t ir = 0;
-
-	printf("PC: %08x ", pc);
-	if (pc_offset >= 0 && pc_offset < sys->ram_size - 3) {
-		ir = *((uint32_t *)(&((uint8_t *)sys->image)[pc_offset]));
-		printf("[0x%08x] ", ir);
-	} else
-		printf("[xxxxxxxxxx] ");
-	uint32_t *regs = sys->core->regs;
-	printf("Z:%08x ra:%08x sp:%08x gp:%08x tp:%08x t0:%08x t1:%08x t2:%08x "
-	       "s0:%08x s1:%08x a0:%08x a1:%08x a2:%08x a3:%08x a4:%08x a5:%08x ",
-	       regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6],
-	       regs[7], regs[8], regs[9], regs[10], regs[11], regs[12],
-	       regs[13], regs[14], regs[15]);
-	printf("a6:%08x a7:%08x s2:%08x s3:%08x s4:%08x s5:%08x s6:%08x s7:%08x "
-	       "s8:%08x s9:%08x s10:%08x s11:%08x t3:%08x t4:%08x t5:%08x t6:%08x\n",
-	       regs[16], regs[17], regs[18], regs[19], regs[20], regs[21],
-	       regs[22], regs[23], regs[24], regs[25], regs[26], regs[27],
-	       regs[28], regs[29], regs[30], regs[31]);
+	assert(inst.priv_I.imm == 0x105);
+	set_bit(&core->mstatus, MSTATUS_MIE);
+	core->wfi = true;
 }
+
+// void proc_inst_priv(struct system *sys, struct inst inst)
+// {
+// 	i_rd = 0;
+// 	int csrno = inst.priv_I.imm;
+// 	if (csrno == 0x105) //WFI (Wait for interrupts)
+// 	{
+// 		CSR(mstatus) |= 8; //Enable interrupts
+// 		core->wfi = true;
+// 		SETCSR(pc, pc + 4);
+// 		return 1;
+
+// 	} else if (((csrno & 0xff) == 0x02)) // MRET
+// 	{
+// 		//https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
+// 		//Table 7.6. MRET then in mstatus/mstatush sets MPV=0, MPP=0, MIE=MPIE, and MPIE=1. La
+// 		// Should also update mstatus to reflect correct mode.
+// 		uint32_t startmstatus =
+// 			CSR(mstatus);
+// 		SETCSR(mstatus,
+// 				((startmstatus &
+// 				0x80) >>
+// 			4) |
+// 					(core->priv
+// 				<< 11) |
+// 					0x80);
+
+// 		core->priv =
+// 			((startmstatus >>
+// 				11) &
+// 				3);
+
+// 		pc = CSR(mepc) - 4;
+// 	} else {
+// 		switch (csrno) {
+// 		case 0:
+// 			trap = (core->priv ==
+// 				PRIV_MACHINE) ?
+// 						(11 +
+// 					1) :
+// 						(8 +
+// 					1);
+// 			break; // ECALL; 8 = "Environment call from U-mode"; 11 = "Environment call from M-mode"
+// 		case 1:
+// 			trap = (3 + 1);
+// 			break; // EBREAK 3 = "Breakpoint"
+// 		default:
+// 			trap = (2 + 1);
+// 			break; // Illegal opcode.
+// 		}
+// 	}
+// }

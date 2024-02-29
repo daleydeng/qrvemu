@@ -32,30 +32,32 @@
 
 #include "riscv.h"
 
-int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *state, uint8_t *image,
-			uint32_t vProcAddress, uint32_t elapsedUs, int count);
+int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *state,
+			uint8_t *image, uint32_t vProcAddress,
+			uint32_t elapsedUs, int count);
 
 #ifndef MINIRV32_CUSTOM_INTERNALS
 #define CSR(x) core->x
-#define SETCSR(x, val)          \
-	{                       \
+#define SETCSR(x, val)         \
+	{                      \
 		core->x = val; \
 	}
 #define REG(x) core->regs[x]
-#define REGSET(x, val)                \
-	{                             \
+#define REGSET(x, val)               \
+	{                            \
 		core->regs[x] = val; \
 	}
 #endif
 
 int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
-					  uint8_t *image, uint32_t vProcAddress,
-					  uint32_t elapsedUs, int count)
+			uint8_t *image, uint32_t vProcAddress,
+			uint32_t elapsedUs, int count)
 {
 	dword_inc(&core->timer, elapsedUs);
 
 	// Handle Timer interrupt.
-	if (!dword_is_zero(core->timermatch) && dword_cmp(core->timer, core->timermatch)) {
+	if (!dword_is_zero(core->timermatch) &&
+	    dword_cmp(core->timer, core->timermatch)) {
 		core->wfi = false;
 		CSR(mip) |=
 			1
@@ -93,7 +95,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				break;
 			} else {
 				ir = MINIRV32_LOAD4(ofs_pc);
-				struct inst inst = *((struct inst*) &ir);
+				struct inst inst = *((struct inst *)&ir);
 				int i_rd = inst.v.rd;
 
 				switch (inst.v.opcode) {
@@ -189,17 +191,18 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 
 					rsval -= sys->ram_base;
 					if (rsval >= sys->ram_size - 3) {
-						rsval +=
-							sys->ram_base;
+						rsval += sys->ram_base;
 						if (rsval >= 0x10000000 &&
 						    rsval < 0x12000000) // UART, CLNT
 						{
 							if (rsval ==
 							    0x1100bffc) // https://chromitem-soc.readthedocs.io/en/latest/clint.html
-								rval = core->timer.high;
+								rval = core->timer
+									       .high;
 							else if (rsval ==
 								 0x1100bff8)
-								 rval = core->timer.low;
+								rval = core->timer
+									       .low;
 							else
 								MINIRV32_HANDLE_MEM_LOAD_CONTROL(
 									rsval,
@@ -256,11 +259,13 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 							// Should be stuff like SYSCON, 8250, CLNT
 							if (addy ==
 							    0x11004004) //CLNT
-								core->timermatch.high =
+								core->timermatch
+									.high =
 									rs2;
 							else if (addy ==
 								 0x11004000) //CLNT
-								core->timermatch.low =
+								core->timermatch
+									.low =
 									rs2;
 							else if (addy ==
 								 0x11100000) //SYSCON (reboot, poweroff, etc.)
@@ -434,24 +439,20 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 					break;
 				case 0x73: // Zifencei+Zicsr  (0b1110011)
 				{
-					if ((inst.v.funct3 & MASK(2))) // It's a Zicsr function.
+					if ((inst.v.funct3 & MASK(2))) // Zicsr function.
 					{
-						rval = handle_Zicsr(sys, inst);
+						rval = proc_inst_Zicsr(core, inst, sys);
 
 					} else if (inst.v.funct3 == 0x0) // "SYSTEM" 0b000
 					{
-						i_rd = 0;
 						int csrno = inst.priv_I.imm;
-						if (csrno ==
-						    0x105) //WFI (Wait for interrupts)
+						if (csrno == 0x105) //WFI (Wait for interrupts)
 						{
-							CSR(mstatus) |=
-								8; //Enable interrupts
-							core->wfi = true;
-							SETCSR(pc, pc + 4);
+							proc_inst_wfi(core, inst);
+							core->pc = pc + 4;
 							return 1;
-						} else if (((csrno & 0xff) ==
-							    0x02)) // MRET
+							
+						} else if (((csrno & 0xff) == 0x02)) // MRET
 						{
 							//https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
 							//Table 7.6. MRET then in mstatus/mstatush sets MPV=0, MPP=0, MIE=MPIE, and MPIE=1. La
@@ -466,15 +467,18 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 									<< 11) |
 								       0x80);
 
-							core->priv = ((startmstatus >>
-									11) &
-								       3);
+							core->priv =
+								((startmstatus >>
+								  11) &
+								 3);
 
 							pc = CSR(mepc) - 4;
 						} else {
+							i_rd = 0;
 							switch (csrno) {
 							case 0:
-								trap = (core->priv == PRIV_MACHINE) ?
+								trap = (core->priv ==
+									PRIV_MACHINE) ?
 									       (11 +
 										1) :
 									       (8 +
@@ -506,8 +510,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 					if (rs1 >= sys->ram_size - 3) {
 						trap = (7 +
 							1); //Store/AMO access fault
-						rval = rs1 +
-						       sys->ram_base;
+						rval = rs1 + sys->ram_base;
 					} else {
 						rval = MINIRV32_LOAD4(rs1);
 
@@ -519,7 +522,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 							core->reservation = rs1;
 							break;
 						case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
-							rval = core->reservation != rs1;
+							rval = core->reservation !=
+							       rs1;
 							dowrite =
 								!rval; // Only write if slot is valid.
 							break;
@@ -580,8 +584,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 					break;
 
 				if (i_rd) {
-					REGSET(i_rd,
-					       rval); // Write back register.
+					REGSET(i_rd, rval); // Write back register.
 				}
 			}
 
@@ -606,8 +609,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		       pc); //TRICKY: The kernel advances mepc automatically.
 		//CSR( mstatus ) & 8 = MIE, & 0x80 = MPIE
 		// On an interrupt, the system moves current MIE into MPIE
-		SETCSR(mstatus, ((CSR(mstatus) & 0x08) << 4) |
-					(core->priv << 11));
+		SETCSR(mstatus,
+		       ((CSR(mstatus) & 0x08) << 4) | (core->priv << 11));
 		pc = (CSR(mtvec) - 4);
 
 		// If trapping, always enter machine mode.
