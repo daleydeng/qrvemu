@@ -1,4 +1,18 @@
-#include "riscv_types.h"
+#include <stdlib.h>
+#include <stdio.h>
+#include "riscv.h"
+
+void sys_alloc_memory(struct system *sys, word_t base, word_t size)
+{
+    sys->ram_base = base;
+    sys->ram_size = size;
+    sys->image = calloc(size, 1);
+    if (!sys->image) {
+		fprintf(stderr, "Error: could not allocate system image.\n");
+		exit(-4);
+	}
+
+}
 
 #ifndef MINIRV32_OTHERCSR_WRITE
 #define MINIRV32_OTHERCSR_WRITE(...) ;
@@ -13,7 +27,7 @@
 #define write_csr(no, name) \
 	case no: core->name = write_val; break;
 
-void handle_Zicsr(struct RVCore_RV32IMA *core, struct inst inst, uint8_t *image) 
+void handle_Zicsr(struct rvcore_rv32ima *core, struct inst inst, uint8_t *image) 
 {
 	word_t rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;

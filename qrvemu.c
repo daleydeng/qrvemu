@@ -2,6 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 #include "utils.h"
 
 int fail_on_all_faults = 0;
@@ -42,23 +43,18 @@ static int ReadKBByte();
 #define MINIRV32_OTHERCSR_READ(csrno, value) \
 	value = HandleOtherCSRRead(image, csrno);
 
-#include "riscv.h"
+#include "riscv1.h"
 
-struct system sys = {
-	.ram_base = 0x80000000,
-	.ram_size = 64 * 1024 * 1024
-};
+size_t RAM_BASE = 0x80000000;
+size_t RAM_SIZE = 64 * 1024 * 1024;
 
-uint8_t *ram_image = 0;
-struct RVCore_RV32IMA core;
-const char *kernel_command_line = 0;
+struct system *sys = NULL;
 
-static void DumpState(struct RVCore_RV32IMA *core, uint8_t *ram_image);
-
-
+static void dump_sys(struct system *sys);
 
 int main(int argc, char **argv)
 {
+	const char *kernel_command_line = 0;
 	int i;
 	long long instct = -1;
 	int show_help = 0;
@@ -76,8 +72,8 @@ int main(int argc, char **argv)
 				switch (param[1]) {
 				case 'm':
 					if (++i < argc)
-						sys.ram_size = SimpleReadNumberInt(
-							argv[i], sys.ram_size);
+						RAM_SIZE = SimpleReadNumberInt(
+							argv[i], RAM_SIZE);
 					break;
 				case 'c':
 					if (++i < argc)
@@ -143,18 +139,16 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
-	ram_image = malloc(sys.ram_size);
-	if (!ram_image) {
-		fprintf(stderr, "Error: could not allocate system image.\n");
-		return -4;
-	}
-	memset(ram_image, 0, sys.ram_size);
+
+	sys = calloc(1, sizeof(struct system));
+	assert(sys);
+	sys_alloc_memory(sys, RAM_BASE, RAM_SIZE);
 
 	long flen = 0;
 	size_t dtb_len = 0;
 
 restart:
-	if ((flen = load_file(ram_image, sys.ram_size, image_file_name, false)) < 0)
+	if ((flen = load_file(sys->image, sys->ram_size, image_file_name, false)) < 0)
 		return flen;
 
 	if (!dtb_file_name) {
@@ -164,15 +158,21 @@ restart:
 		return -9;
 	}
 
-	if ((dtb_len = load_file(ram_image, sys.ram_size, dtb_file_name, true)) < 0)
+	if ((dtb_len = load_file(sys->image, sys->ram_size, dtb_file_name, true)) < 0)
 	    return dtb_len;
+
+	if( kernel_command_line )
+		strncpy( (char*)(sys_ram_end(sys) - dtb_len + 0xc0 ), kernel_command_line, 54 );
 
 	CaptureKeyboardInput();
 
-	core.pc = sys.ram_base;
-	core.regs[R_a0] = 0x00; // hart ID
-	core.regs[R_a1] = sys.ram_base + sys.ram_size - dtb_len;
-	core.priv = PRIV_MACHINE; // Machine-mode.
+	struct rvcore_rv32ima *core = calloc(1, sizeof(struct rvcore_rv32ima));
+	core->pc = RAM_BASE;
+	core->regs[R_a0] = 0x00; // hart ID
+	core->regs[R_a1] = RAM_BASE + RAM_SIZE - dtb_len;
+	core->priv = PRIV_MACHINE; // Machine-mode.
+
+	sys->core = core;
 
 	// Image is loaded.
 	uint64_t rt;
@@ -180,7 +180,7 @@ restart:
 		(fixed_update) ? 0 : (GetTimeMicroseconds() / time_divisor);
 	int instrs_per_flip = single_step ? 1 : 1024;
 	for (rt = 0; rt < instct + 1 || instct < 0; rt += instrs_per_flip) {
-		uint64_t *this_ccount = ((uint64_t *)&core.cycle.low);
+		uint64_t *this_ccount = ((uint64_t *)&core->cycle.low);
 		uint32_t elapsedUs = 0;
 		if (fixed_update)
 			elapsedUs = *this_ccount / time_divisor - lastTime;
@@ -190,11 +190,11 @@ restart:
 		lastTime += elapsedUs;
 
 		if (single_step)
-			DumpState(&core, ram_image);
+			dump_sys(sys);
 
 		int ret = MiniRV32IMAStep(
-			&sys,
-			&core, ram_image, 0, elapsedUs,
+			sys,
+			core, sys->image, 0, elapsedUs,
 			instrs_per_flip); // Execute upto 1024 cycles before breaking out.
 		switch (ret) {
 		case 0:
@@ -210,8 +210,8 @@ restart:
 		case 0x7777:
 			goto restart; // syscon code for restart
 		case 0x5555:
-			printf("POWEROFF@0x%08x%08x\n", core.cycle.high,
-			       core.cycle.low);
+			printf("POWEROFF@0x%08x%08x\n", core->cycle.high,
+			       core->cycle.low);
 			return 0; // syscon code for power-off
 		default:
 			printf("Unknown failure\n");
@@ -219,7 +219,7 @@ restart:
 		}
 	}
 
-	DumpState(&core, ram_image);
+	dump_sys(sys);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -234,7 +234,7 @@ restart:
 
 static void CtrlC()
 {
-	DumpState(&core, ram_image);
+	dump_sys(sys);
 	exit(0);
 }
 
@@ -344,11 +344,11 @@ static void HandleOtherCSRWrite(uint8_t *image, uint16_t csrno, uint32_t value)
 		fflush(stdout);
 	} else if (csrno == 0x138) {
 		// Print "string"
-		uint32_t ptrstart = value - sys.ram_base;
+		uint32_t ptrstart = value - sys->ram_base;
 		uint32_t ptrend = ptrstart;
-		if (ptrstart >= sys.ram_size)
+		if (ptrstart >= sys->ram_size)
 			printf("DEBUG PASSED INVALID PTR (%08x)\n", value);
-		while (ptrend < sys.ram_size) {
+		while (ptrend < sys->ram_size) {
 			if (image[ptrend] == 0)
 				break;
 			ptrend++;
@@ -399,19 +399,19 @@ static int64_t SimpleReadNumberInt(const char *number, int64_t defaultNumber)
 	}
 }
 
-static void DumpState(struct RVCore_RV32IMA *core, uint8_t *ram_image)
+static void dump_sys(struct system *sys)
 {
-	uint32_t pc = core->pc;
-	uint32_t pc_offset = pc - sys.ram_base;
+	uint32_t pc = sys->core->pc;
+	uint32_t pc_offset = pc - sys->ram_base;
 	uint32_t ir = 0;
 
 	printf("PC: %08x ", pc);
-	if (pc_offset >= 0 && pc_offset < sys.ram_size - 3) {
-		ir = *((uint32_t *)(&((uint8_t *)ram_image)[pc_offset]));
+	if (pc_offset >= 0 && pc_offset < sys->ram_size - 3) {
+		ir = *((uint32_t *)(&((uint8_t *)sys->image)[pc_offset]));
 		printf("[0x%08x] ", ir);
 	} else
 		printf("[xxxxxxxxxx] ");
-	uint32_t *regs = core->regs;
+	uint32_t *regs = sys->core->regs;
 	printf("Z:%08x ra:%08x sp:%08x gp:%08x tp:%08x t0:%08x t1:%08x t2:%08x "
 	       "s0:%08x s1:%08x a0:%08x a1:%08x a2:%08x a3:%08x a4:%08x a5:%08x ",
 	       regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6],
