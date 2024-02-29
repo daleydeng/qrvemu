@@ -49,7 +49,7 @@ struct system sys = {
 };
 
 uint8_t *ram_image = 0;
-struct MiniRV32IMAState *core;
+struct MiniRV32IMAState core;
 const char *kernel_command_line = 0;
 
 static void DumpState(struct MiniRV32IMAState *core, uint8_t *ram_image);
@@ -177,7 +177,6 @@ int main(int argc, char **argv)
 	memset(ram_image, 0, sys.ram_size);
 
 	long flen = 0;
-	size_t state_size = sizeof(struct MiniRV32IMAState);
 	size_t dtb_len = 0;
 
 restart:
@@ -191,18 +190,15 @@ restart:
 		return -9;
 	}
 
-	if ((dtb_len = load_file(ram_image, sys.ram_size - state_size, dtb_file_name, true)) < 0)
+	if ((dtb_len = load_file(ram_image, sys.ram_size, dtb_file_name, true)) < 0)
 	    return dtb_len;
 
 	CaptureKeyboardInput();
 
-	// The core lives at the end of RAM.
-	core = (struct MiniRV32IMAState *)(ram_image + sys.ram_size -
-					   sizeof(struct MiniRV32IMAState));
-	core->pc = sys.ram_base;
-	core->regs[R_a0] = 0x00; // hart ID
-	core->regs[R_a1] = sys.ram_base + sys.ram_size - dtb_len - state_size;
-	core->extraflags |= 3; // Machine-mode.
+	core.pc = sys.ram_base;
+	core.regs[R_a0] = 0x00; // hart ID
+	core.regs[R_a1] = sys.ram_base + sys.ram_size - dtb_len;
+	core.extraflags |= 3; // Machine-mode.
 
 	// Image is loaded.
 	uint64_t rt;
@@ -210,7 +206,7 @@ restart:
 		(fixed_update) ? 0 : (GetTimeMicroseconds() / time_divisor);
 	int instrs_per_flip = single_step ? 1 : 1024;
 	for (rt = 0; rt < instct + 1 || instct < 0; rt += instrs_per_flip) {
-		uint64_t *this_ccount = ((uint64_t *)&core->cycle.low);
+		uint64_t *this_ccount = ((uint64_t *)&core.cycle.low);
 		uint32_t elapsedUs = 0;
 		if (fixed_update)
 			elapsedUs = *this_ccount / time_divisor - lastTime;
@@ -220,11 +216,11 @@ restart:
 		lastTime += elapsedUs;
 
 		if (single_step)
-			DumpState(core, ram_image);
+			DumpState(&core, ram_image);
 
 		int ret = MiniRV32IMAStep(
 			&sys,
-			core, ram_image, 0, elapsedUs,
+			&core, ram_image, 0, elapsedUs,
 			instrs_per_flip); // Execute upto 1024 cycles before breaking out.
 		switch (ret) {
 		case 0:
@@ -240,8 +236,8 @@ restart:
 		case 0x7777:
 			goto restart; // syscon code for restart
 		case 0x5555:
-			printf("POWEROFF@0x%08x%08x\n", core->cycle.high,
-			       core->cycle.low);
+			printf("POWEROFF@0x%08x%08x\n", core.cycle.high,
+			       core.cycle.low);
 			return 0; // syscon code for power-off
 		default:
 			printf("Unknown failure\n");
@@ -249,96 +245,12 @@ restart:
 		}
 	}
 
-	DumpState(core, ram_image);
+	DumpState(&core, ram_image);
 }
 
 //////////////////////////////////////////////////////////////////////////
 // Platform-specific functionality
 //////////////////////////////////////////////////////////////////////////
-
-#if defined(WINDOWS) || defined(WIN32) || defined(_WIN32)
-
-#include <conio.h>
-#include <windows.h>
-
-#define strtoll _strtoi64
-
-static void CaptureKeyboardInput()
-{
-	system(""); // Poorly documented tick: Enable VT100 Windows mode.
-}
-
-static void ResetKeyboardInput()
-{
-}
-
-static void MiniSleep()
-{
-	Sleep(1);
-}
-
-static uint64_t GetTimeMicroseconds()
-{
-	static LARGE_INTEGER lpf;
-	LARGE_INTEGER li;
-
-	if (!lpf.QuadPart)
-		QueryPerformanceFrequency(&lpf);
-
-	QueryPerformanceCounter(&li);
-	return ((uint64_t)li.QuadPart * 1000000LL) / (uint64_t)lpf.QuadPart;
-}
-
-static int IsKBHit()
-{
-	return _kbhit();
-}
-
-static int ReadKBByte()
-{
-	// This code is kind of tricky, but used to convert windows arrow keys
-	// to VT100 arrow keys.
-	static int is_escape_sequence = 0;
-	int r;
-	if (is_escape_sequence == 1) {
-		is_escape_sequence++;
-		return '[';
-	}
-
-	r = _getch();
-
-	if (is_escape_sequence) {
-		is_escape_sequence = 0;
-		switch (r) {
-		case 'H':
-			return 'A'; // Up
-		case 'P':
-			return 'B'; // Down
-		case 'K':
-			return 'D'; // Left
-		case 'M':
-			return 'C'; // Right
-		case 'G':
-			return 'H'; // Home
-		case 'O':
-			return 'F'; // End
-		default:
-			return r; // Unknown code.
-		}
-	} else {
-		switch (r) {
-		case 13:
-			return 10; // cr->lf
-		case 224:
-			is_escape_sequence = 1;
-			return 27; // Escape arrow keys
-		default:
-			return r;
-		}
-	}
-}
-
-#else
 
 #include <signal.h>
 #include <sys/ioctl.h>
@@ -348,7 +260,7 @@ static int ReadKBByte()
 
 static void CtrlC()
 {
-	DumpState(core, ram_image);
+	DumpState(&core, ram_image);
 	exit(0);
 }
 
@@ -413,8 +325,6 @@ static int IsKBHit()
 	} // Is end-of-file for
 	return !!byteswaiting;
 }
-
-#endif
 
 //////////////////////////////////////////////////////////////////////////
 // Rest of functions functionality

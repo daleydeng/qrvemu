@@ -11,6 +11,8 @@
 typedef uint32_t word_t;
 typedef uint32_t inst_t;
 
+#define ALIGN 8
+
 #define get_bit(reg, b) ((reg) & 1 << (b))
 #define get_bit2(reg, b) (((reg) << b) & 0x03)
 #define set_bit(reg, b) ((*(reg)) |= 1 << (b))
@@ -173,7 +175,10 @@ struct MiniRV32IMAState {
 	// Bit 2 = WFI (Wait for interrupt)
 	// Bit 3+ = Load/Store reservation LSBs.
 	uint32_t extraflags;
-};
+
+	bool wfi;
+	
+} __attribute__((aligned(ALIGN)));
 
 int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state, uint8_t *image,
 			uint32_t vProcAddress, uint32_t elapsedUs, int count);
