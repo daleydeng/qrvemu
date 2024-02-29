@@ -54,6 +54,36 @@ const char *kernel_command_line = 0;
 
 static void DumpState(struct MiniRV32IMAState *core, uint8_t *ram_image);
 
+long load_file(void *ptr, size_t size, const char *fname, bool back_mapping)
+{
+	FILE *f = fopen(fname, "rb");
+	if (!f || ferror(f)) {
+		fprintf(stderr, "Error: \"%s\" not found\n", fname);
+		return -5;
+	}
+
+	fseek(f, 0, SEEK_END);
+	long flen = ftell(f);
+	fseek(f, 0, SEEK_SET);
+	if (flen > size) {
+		fprintf(stderr,
+			"Error: Could not fit RAM image (%ld bytes) into %lu\n",
+			flen, size);
+		return -6;
+	}
+
+	if (back_mapping)
+		ptr = ptr + size - flen;
+
+	memset(ptr, 0, size);
+	if (fread(ptr, flen, 1, f) != 1) {
+		fprintf(stderr, "Error: Could not load image.\n");
+		return -7;
+	}
+	fclose(f);
+	return flen;
+}
+
 int main(int argc, char **argv)
 {
 	int i;
@@ -147,28 +177,12 @@ int main(int argc, char **argv)
 		return -4;
 	}
 
+	long flen = 0;
+	FILE *f;
+	
 restart: {
-	FILE *f = fopen(image_file_name, "rb");
-	if (!f || ferror(f)) {
-		fprintf(stderr, "Error: \"%s\" not found\n", image_file_name);
-		return -5;
-	}
-	fseek(f, 0, SEEK_END);
-	long flen = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	if (flen > sys.ram_size) {
-		fprintf(stderr,
-			"Error: Could not fit RAM image (%ld bytes) into %d\n",
-			flen, sys.ram_size);
-		return -6;
-	}
-
-	memset(ram_image, 0, sys.ram_size);
-	if (fread(ram_image, flen, 1, f) != 1) {
-		fprintf(stderr, "Error: Could not load image.\n");
-		return -7;
-	}
-	fclose(f);
+	if ((flen = load_file(ram_image, sys.ram_size, image_file_name, false)) < 0)
+		return flen;
 
 	if (dtb_file_name) {
 		if (strcmp(dtb_file_name, "disable") == 0) {
@@ -207,8 +221,8 @@ restart: {
 	core = (struct MiniRV32IMAState *)(ram_image + sys.ram_size -
 					   sizeof(struct MiniRV32IMAState));
 	core->pc = sys.ram_base;
-	core->regs[10] = 0x00; // hart ID
-	core->regs[11] =
+	core->regs[R_a0] = 0x00; // hart ID
+	core->regs[R_a1] =
 		dtb_ptr ?
 			(dtb_ptr + sys.ram_base) :
 			0; // dtb_pa (Must be valid pointer) (Should be pointer to dtb)

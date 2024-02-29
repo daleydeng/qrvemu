@@ -114,6 +114,42 @@ enum priv { PRIV_USER = 0x00, PRIV_SUPERVISOR = 0x01, PRIV_MACHINE = 0x03 };
 #define MINIRV32_LOAD1_SIGNED(ofs) *(int8_t *)(image + ofs)
 #endif
 
+enum reg_name {
+	R_zero = 0,
+	R_ra = 1,
+	R_sp = 2,
+	R_gp = 3,
+	R_tp = 4,
+	R_t0 = 5,
+	R_t1 = 6,
+	R_t2 = 7,
+	R_s0 = 8,
+	R_fp = 8,
+	R_s1 = 9,
+	R_a0 = 10,
+	R_a1 = 11,
+	R_a2 = 12,
+	R_a3 = 13,
+	R_a4 = 14,
+	R_a5 = 15,
+	R_a6 = 16,
+	R_a7 = 17,
+	R_s2 = 18,
+	R_s3 = 19,
+	R_s4 = 20,
+	R_s5 = 21,
+	R_s6 = 22,
+	R_s7 = 23,
+	R_s8 = 24,
+	R_s9 = 25,
+	R_s10 = 26,
+	R_s11 = 27,
+	R_t3 = 28,
+	R_t4 = 29,
+	R_t5 = 30,
+	R_t6 = 31,
+};
+
 struct MiniRV32IMAState {
 	uint32_t regs[32];
 
