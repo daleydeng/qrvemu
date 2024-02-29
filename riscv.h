@@ -170,12 +170,6 @@ struct MiniRV32IMAState {
 	uint32_t mtval;
 	uint32_t mcause;
 
-	// Note: only a few bits are used.  (Machine = 3, User = 0)
-	// Bits 0..1 = privilege.
-	// Bit 2 = WFI (Wait for interrupt)
-	// Bit 3+ = Load/Store reservation LSBs.
-	uint32_t extraflags;
-
 	enum priv priv;
 	bool wfi;
 	word_t reservation;
@@ -726,8 +720,6 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 							// Should also update mstatus to reflect correct mode.
 							uint32_t startmstatus =
 								CSR(mstatus);
-							uint32_t startextraflags =
-								CSR(extraflags);
 							SETCSR(mstatus,
 							       ((startmstatus &
 								 0x80) >>
@@ -740,11 +732,6 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 									11) &
 								       3);
 
-							// SETCSR(extraflags,
-							//        (startextraflags &
-							// 	~3) | ((startmstatus >>
-							// 		11) &
-							// 	       3));
 							pc = CSR(mepc) - 4;
 						} else {
 							switch (csrno) {
