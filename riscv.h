@@ -6,10 +6,82 @@
 #define _RISCV_H
 
 #include <stdint.h>
+#include <stdbool.h>
 
-#ifndef MINIRV32_RAM_IMAGE_OFFSET
-#define MINIRV32_RAM_IMAGE_OFFSET 0x80000000
-#endif
+typedef uint32_t word_t;
+typedef uint32_t inst_t;
+
+#define get_bit(reg, b) ((reg) & 1 << (b))
+#define get_bit2(reg, b) (((reg) << b) & 0x03)
+#define set_bit(reg, b) ((*(reg)) |= 1 << (b))
+#define clear_bit(reg, b) ((*(reg)) &=~ 1 << (b))
+
+static inline void copy_bit(word_t *reg, int b, bool val)
+{
+	if (val) {
+		set_bit(reg, b);
+	} else {
+		clear_bit(reg, b);
+	}
+}
+
+static inline void copy_bit2(word_t *reg, int b, int val)
+{
+	copy_bit(reg, b, val & 0x01);
+	copy_bit(reg, b, val & 0x02);
+}
+
+enum mstatus { MSTATUS_MIE = 3, MSTATUS_MPIE = 7, MSTATUS_MPP = 11 };
+
+enum trap_type { TRAP_NONE, INTERRUPT, EXCEPTION };
+
+enum interrupt_type { INTR_MACHINE_TIMER = 7 };
+
+enum exception_type {
+	EXC_NONE = -1,
+	EXC_INST_ADDR_MISALIGNED = 0,
+	EXC_INST_ACCESS_FAULT = 1,
+	EXC_ILLEGAL_INST = 2,
+	EXC_BREAKPOINT = 3,
+	EXC_LOAD_ADDR_MISALIGNED = 4,
+	EXC_LOAD_ACCESS_FAULT = 5,
+	EXC_STORE_ADDR_MISALIGNED = 6,
+	EXC_STORE_ACCESS_FAULT = 7,
+	EXC_ECALL_FROM_U_MODE = 8,
+	EXC_ECALL_FROM_S_MODE = 9,
+	EXC_ECALL_FROM_M_MODE = 11,
+};
+
+struct system {
+	word_t ram_base;
+	word_t ram_size;
+};
+
+typedef struct {
+	word_t low, high;
+} dword_t;
+
+static inline void dword_inc(dword_t *val, word_t delta)
+{
+	word_t new = val->low + delta;
+	if (new < val->low) {
+		val->high++;
+	}
+	val->low = new;
+}
+
+static inline bool dword_cmp(dword_t a, dword_t b)
+{
+	return (a.high > b.high || (a.high == b.high && a.low > b.low));
+}
+
+static inline bool dword_is_zero(dword_t a)
+{
+	return a.low == 0 && a.high == 0;
+}
+
+enum priv { PRIV_USER = 0x00, PRIV_SUPERVISOR = 0x01, PRIV_MACHINE = 0x03 };
+
 
 #ifndef MINIRV32_POSTEXEC
 #define MINIRV32_POSTEXEC(...) ;
@@ -41,13 +113,6 @@
 #define MINIRV32_LOAD2_SIGNED(ofs) *(int16_t *)(image + ofs)
 #define MINIRV32_LOAD1_SIGNED(ofs) *(int8_t *)(image + ofs)
 #endif
-
-typedef  uint32_t word_t;
-
-struct system {
-	word_t ram_base;
-	word_t ram_size;
-};
 
 struct MiniRV32IMAState {
 	uint32_t regs[32];
@@ -81,8 +146,6 @@ struct MiniRV32IMAState {
 int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state, uint8_t *image,
 			uint32_t vProcAddress, uint32_t elapsedUs, int count);
 
-#ifdef MINIRV32_IMPLEMENTATION
-
 #ifndef MINIRV32_CUSTOM_INTERNALS
 #define CSR(x) state->x
 #define SETCSR(x, val)          \
@@ -96,13 +159,9 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state, uint
 	}
 #endif
 
-#ifndef MINIRV32_STEPPROTO
 int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 					  uint8_t *image, uint32_t vProcAddress,
 					  uint32_t elapsedUs, int count)
-#else
-MINIRV32_STEPPROTO
-#endif
 {
 	uint32_t new_timer = CSR(timerl) + elapsedUs;
 	if (new_timer < CSR(timerl))
@@ -140,7 +199,7 @@ MINIRV32_STEPPROTO
 			uint32_t ir = 0;
 			rval = 0;
 			cycle++;
-			uint32_t ofs_pc = pc - MINIRV32_RAM_IMAGE_OFFSET;
+			uint32_t ofs_pc = pc - sys->ram_base;
 
 			if (ofs_pc >= sys->ram_size) {
 				trap = 1 +
@@ -244,10 +303,10 @@ MINIRV32_STEPPROTO
 								  0);
 					uint32_t rsval = rs1 + imm_se;
 
-					rsval -= MINIRV32_RAM_IMAGE_OFFSET;
+					rsval -= sys->ram_base;
 					if (rsval >= sys->ram_size - 3) {
 						rsval +=
-							MINIRV32_RAM_IMAGE_OFFSET;
+							sys->ram_base;
 						if (rsval >= 0x10000000 &&
 						    rsval < 0x12000000) // UART, CLNT
 						{
@@ -305,11 +364,11 @@ MINIRV32_STEPPROTO
 						((ir & 0xfe000000) >> 20);
 					if (addy & 0x800)
 						addy |= 0xfffff000;
-					addy += rs1 - MINIRV32_RAM_IMAGE_OFFSET;
+					addy += rs1 - sys->ram_base;
 					rdid = 0;
 
 					if (addy >= sys->ram_size - 3) {
-						addy += MINIRV32_RAM_IMAGE_OFFSET;
+						addy += sys->ram_base;
 						if (addy >= 0x10000000 &&
 						    addy < 0x12000000) {
 							// Should be stuff like SYSCON, 8250, CLNT
@@ -679,7 +738,7 @@ MINIRV32_STEPPROTO
 					uint32_t rs2 = REG((ir >> 20) & 0x1f);
 					uint32_t irmid = (ir >> 27) & 0x1f;
 
-					rs1 -= MINIRV32_RAM_IMAGE_OFFSET;
+					rs1 -= sys->ram_base;
 
 					// We don't implement load/store from UART or CLNT with RV32A here.
 
@@ -687,7 +746,7 @@ MINIRV32_STEPPROTO
 						trap = (7 +
 							1); //Store/AMO access fault
 						rval = rs1 +
-						       MINIRV32_RAM_IMAGE_OFFSET;
+						       sys->ram_base;
 					} else {
 						rval = MINIRV32_LOAD4(rs1);
 
@@ -809,7 +868,5 @@ MINIRV32_STEPPROTO
 	SETCSR(pc, pc);
 	return 0;
 }
-
-#endif
 
 #endif // _RISCV_H

@@ -1,0 +1,11 @@
+bintoh
+qrvemu
+q64mb.h
+kernel.img
+bin/
+compile_commands.json
+tmp/
+*.dtb
+*.o
+.*
+!.gitignore

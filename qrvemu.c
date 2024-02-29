@@ -23,7 +23,6 @@ static int ReadKBByte();
 // This is the functionality we want to override in the emulator.
 //  think of this as the way the emulator's processor is connected to the
 //  outside world.
-#define MINIRV32_IMPLEMENTATION
 #define MINIRV32_POSTEXEC(pc, ir, retval)                             \
 	{                                                             \
 		if (retval > 0) {                                     \
@@ -213,11 +212,11 @@ restart: {
 	// The core lives at the end of RAM.
 	core = (struct MiniRV32IMAState *)(ram_image + sys.ram_size -
 					   sizeof(struct MiniRV32IMAState));
-	core->pc = MINIRV32_RAM_IMAGE_OFFSET;
+	core->pc = sys.ram_base;
 	core->regs[10] = 0x00; // hart ID
 	core->regs[11] =
 		dtb_ptr ?
-			(dtb_ptr + MINIRV32_RAM_IMAGE_OFFSET) :
+			(dtb_ptr + sys.ram_base) :
 			0; // dtb_pa (Must be valid pointer) (Should be pointer to dtb)
 	core->extraflags |= 3; // Machine-mode.
 
@@ -491,7 +490,7 @@ static void HandleOtherCSRWrite(uint8_t *image, uint16_t csrno, uint32_t value)
 		fflush(stdout);
 	} else if (csrno == 0x138) {
 		// Print "string"
-		uint32_t ptrstart = value - MINIRV32_RAM_IMAGE_OFFSET;
+		uint32_t ptrstart = value - sys.ram_base;
 		uint32_t ptrend = ptrstart;
 		if (ptrstart >= sys.ram_size)
 			printf("DEBUG PASSED INVALID PTR (%08x)\n", value);
@@ -549,7 +548,7 @@ static int64_t SimpleReadNumberInt(const char *number, int64_t defaultNumber)
 static void DumpState(struct MiniRV32IMAState *core, uint8_t *ram_image)
 {
 	uint32_t pc = core->pc;
-	uint32_t pc_offset = pc - MINIRV32_RAM_IMAGE_OFFSET;
+	uint32_t pc_offset = pc - sys.ram_base;
 	uint32_t ir = 0;
 
 	printf("PC: %08x ", pc);
