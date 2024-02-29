@@ -8,11 +8,15 @@
 #include <stdint.h>
 #include <stdbool.h>
 
+#include <stdio.h>
+#include <stdlib.h>
+
 typedef uint32_t word_t;
 typedef uint32_t inst_t;
 
 #define ALIGN 8
 
+#define MASK(n) ((1 << (n)) - 1)
 #define get_bit(reg, b) ((reg) & 1 << (b))
 #define get_bit2(reg, b) (((reg) << b) & 0x03)
 #define set_bit(reg, b) ((*(reg)) |= 1 << (b))
@@ -176,6 +180,38 @@ struct MiniRV32IMAState {
 	
 } __attribute__((aligned(ALIGN)));
 
+struct inst {
+	union {
+		struct {
+			word_t opcode:7;
+			word_t rd:5;
+			word_t funct3:3;
+		} v;
+		struct {
+			word_t opcode:7;
+			word_t rd:5;
+			word_t funct3:3;
+			word_t rs1:5;
+			word_t rs2:5;
+			word_t funct7:7;
+		} priv_R;
+		struct {
+			word_t opcode:7;
+			word_t rd:5;
+			word_t funct3:3;
+			word_t rs1:5;
+			word_t imm:12;
+		} priv_I;
+		struct {
+			word_t opcode:7;
+			word_t rd:5;
+			word_t funct3:3;
+			word_t rs1_uimm:5;
+			word_t csr:12;
+		} Zicsr;
+	};
+} __attribute__((packed));
+
 int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state, uint8_t *image,
 			uint32_t vProcAddress, uint32_t elapsedUs, int count);
 
@@ -222,11 +258,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 		pc -= 4;
 	} else // No timer interrupt?  Execute a bunch of instructions.
 		for (int icount = 0; icount < count; icount++) {
-			uint32_t ir = 0;
+			word_t ir = 0;
 			rval = 0;
 			dword_inc(&state->cycle, 1);
 
-			uint32_t ofs_pc = pc - sys->ram_base;
+			word_t ofs_pc = pc - sys->ram_base;
 
 			if (ofs_pc >= sys->ram_size) {
 				trap = 1 +
@@ -237,9 +273,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 				break;
 			} else {
 				ir = MINIRV32_LOAD4(ofs_pc);
-				uint32_t rdid = (ir >> 7) & 0x1f;
+				struct inst inst = *((struct inst*) &ir);
+				int i_rd = inst.v.rd;
 
-				switch (ir & 0x7f) {
+				switch (inst.v.opcode) {
 				case 0x37: // LUI (0b0110111)
 					rval = (ir & 0xfffff000);
 					break;
@@ -286,7 +323,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 					int32_t rs1 = REG((ir >> 15) & 0x1f);
 					int32_t rs2 = REG((ir >> 20) & 0x1f);
 					immm4 = pc + immm4 - 4;
-					rdid = 0;
+					i_rd = 0;
 					switch ((ir >> 12) & 0x7) {
 					// BEQ, BNE, BLT, BGE, BLTU, BGEU
 					case 0:
@@ -390,7 +427,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 					if (addy & 0x800)
 						addy |= 0xfffff000;
 					addy += rs1 - sys->ram_base;
-					rdid = 0;
+					i_rd = 0;
 
 					if (addy >= sys->ram_size - 3) {
 						addy += sys->ram_base;
@@ -573,14 +610,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 					break;
 				}
 				case 0x0f: // 0b0001111
-					rdid = 0; // fencetype = (ir >> 12) & 0b111; We ignore fences in this impl.
+					i_rd = 0; // fencetype = (ir >> 12) & 0b111; We ignore fences in this impl.
 					break;
 				case 0x73: // Zifencei+Zicsr  (0b1110011)
 				{
-					uint32_t csrno = ir >> 20;
-					uint32_t microop = (ir >> 12) & 0x7;
-					if ((microop &
-					     3)) // It's a Zicsr function.
+					if ((inst.v.funct3 & MASK(2))) // It's a Zicsr function.
 					{
 						int rs1imm = (ir >> 15) & 0x1f;
 						uint32_t rs1 = REG(rs1imm);
@@ -588,7 +622,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 
 						// https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
 						// Generally, support for Zicsr
-						switch (csrno) {
+						switch (inst.Zicsr.csr) {
 						case 0x340:
 							rval = CSR(mscratch);
 							break;
@@ -632,11 +666,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						//case 0xf14: rval = 0x00000000; break; //mhartid
 						default:
 							MINIRV32_OTHERCSR_READ(
-								csrno, rval);
+								inst.Zicsr.csr, rval);
 							break;
 						}
 
-						switch (microop) {
+						switch (inst.Zicsr.funct3) {
 						case 1:
 							writeval = rs1;
 							break; //CSRRW
@@ -659,7 +693,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 							break; //CSRRCI
 						}
 
-						switch (csrno) {
+						switch (inst.Zicsr.csr) {
 						case 0x340:
 							SETCSR(mscratch,
 							       writeval);
@@ -696,14 +730,14 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						//case 0x301: break; //misa
 						default:
 							MINIRV32_OTHERCSR_WRITE(
-								csrno,
+								inst.Zicsr.csr,
 								writeval);
 							break;
 						}
-					} else if (microop ==
-						   0x0) // "SYSTEM" 0b000
+					} else if (inst.v.funct3 == 0x0) // "SYSTEM" 0b000
 					{
-						rdid = 0;
+						i_rd = 0;
+						int csrno = inst.priv_I.imm;
 						if (csrno ==
 						    0x105) //WFI (Wait for interrupts)
 						{
@@ -841,8 +875,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 				if (trap)
 					break;
 
-				if (rdid) {
-					REGSET(rdid,
+				if (i_rd) {
+					REGSET(i_rd,
 					       rval); // Write back register.
 				}
 			}
