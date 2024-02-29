@@ -121,10 +121,7 @@ struct MiniRV32IMAState {
 	uint32_t mstatus;
 	dword_t cycle;
 
-	uint32_t timerl;
-	uint32_t timerh;
-	uint32_t timermatchl;
-	uint32_t timermatchh;
+	dword_t timer, timermatch;
 
 	uint32_t mscratch;
 	uint32_t mtvec;
@@ -162,22 +159,17 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 					  uint8_t *image, uint32_t vProcAddress,
 					  uint32_t elapsedUs, int count)
 {
-	uint32_t new_timer = CSR(timerl) + elapsedUs;
-	if (new_timer < CSR(timerl))
-		CSR(timerh)++;
-	CSR(timerl) = new_timer;
+	dword_inc(&state->timer, elapsedUs);
 
 	// Handle Timer interrupt.
-	if ((CSR(timerh) > CSR(timermatchh) ||
-	     (CSR(timerh) == CSR(timermatchh) &&
-	      CSR(timerl) > CSR(timermatchl))) &&
-	    (CSR(timermatchh) || CSR(timermatchl))) {
+	if (!dword_is_zero(state->timermatch) && dword_cmp(state->timer, state->timermatch)) {
 		CSR(extraflags) &= ~4; // Clear WFI
 		CSR(mip) |=
 			1
 			<< 7; //MTIP of MIP // https://stackoverflow.com/a/61916199/2926815  Fire interrupt.
-	} else
+	} else {
 		CSR(mip) &= ~(1 << 7);
+	}
 
 	// If WFI, don't run processor.
 	if (CSR(extraflags) & 4)
@@ -311,12 +303,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						{
 							if (rsval ==
 							    0x1100bffc) // https://chromitem-soc.readthedocs.io/en/latest/clint.html
-								rval = CSR(
-									timerh);
+								rval = state->timer.high;
 							else if (rsval ==
 								 0x1100bff8)
-								rval = CSR(
-									timerl);
+								 rval = state->timer.low;
 							else
 								MINIRV32_HANDLE_MEM_LOAD_CONTROL(
 									rsval,
@@ -373,11 +363,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 							// Should be stuff like SYSCON, 8250, CLNT
 							if (addy ==
 							    0x11004004) //CLNT
-								CSR(timermatchh) =
+								state->timermatch.high =
 									rs2;
 							else if (addy ==
 								 0x11004000) //CLNT
-								CSR(timermatchl) =
+								state->timermatch.low =
 									rs2;
 							else if (addy ==
 								 0x11100000) //SYSCON (reboot, poweroff, etc.)
