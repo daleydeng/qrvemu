@@ -13,8 +13,6 @@ static void CaptureKeyboardInput();
 static uint32_t HandleException(uint32_t ir, uint32_t retval);
 static uint32_t HandleControlStore(uint32_t addy, uint32_t val);
 static uint32_t HandleControlLoad(uint32_t addy);
-static void HandleOtherCSRWrite(uint8_t *image, uint16_t csrno, uint32_t value);
-static int32_t HandleOtherCSRRead(uint8_t *image, uint16_t csrno);
 static void MiniSleep();
 static int IsKBHit();
 static int ReadKBByte();
@@ -37,13 +35,12 @@ static int ReadKBByte();
 		return val;
 #define MINIRV32_HANDLE_MEM_LOAD_CONTROL(addy, rval) \
 	rval = HandleControlLoad(addy);
-#define MINIRV32_OTHERCSR_WRITE(csrno, value) \
-	HandleOtherCSRWrite(image, csrno, value);
-#define MINIRV32_OTHERCSR_READ(csrno, value) \
-	value = HandleOtherCSRRead(image, csrno);
 
 #include "riscv1.h"
 #include "utils.h"
+
+static word_t read_other_csr(struct system *sys, struct inst inst);
+static void write_other_csr(struct system *sys, struct inst inst, word_t val);
 
 size_t RAM_BASE = 0x80000000;
 size_t RAM_SIZE = 64 * 1024 * 1024;
@@ -141,7 +138,9 @@ int main(int argc, char **argv)
 	sys = calloc(1, sizeof(struct system));
 	assert(sys);
 	sys_alloc_memory(sys, RAM_BASE, RAM_SIZE);
-
+	sys->read_csr = read_other_csr;
+	sys->write_csr = write_other_csr;
+	
 	long flen = 0;
 	size_t dtb_len = 0;
 
@@ -331,37 +330,47 @@ static uint32_t HandleControlLoad(uint32_t addy)
 	return 0;
 }
 
-static void HandleOtherCSRWrite(uint8_t *image, uint16_t csrno, uint32_t value)
+static void write_other_csr(struct system *sys, struct inst inst, word_t val)
 {
-	if (csrno == 0x136) {
-		printf("%d", value);
+	word_t ptrstart, ptrend;
+
+	switch (inst.Zicsr.csr) {
+	case 0x136:
+		printf("%d", val);
 		fflush(stdout);
-	}
-	if (csrno == 0x137) {
-		printf("%08x", value);
+		break;
+
+	case 0x137:
+		printf("%08x", val);
 		fflush(stdout);
-	} else if (csrno == 0x138) {
+		break;
+
+	case 0x138:
 		// Print "string"
-		uint32_t ptrstart = value - sys->ram_base;
-		uint32_t ptrend = ptrstart;
+		ptrstart = val - sys->ram_base;
+		ptrend = ptrstart;
 		if (ptrstart >= sys->ram_size)
-			printf("DEBUG PASSED INVALID PTR (%08x)\n", value);
+			printf("DEBUG PASSED INVALID PTR (%08x)\n", val);
 		while (ptrend < sys->ram_size) {
-			if (image[ptrend] == 0)
+			if (sys->image[ptrend] == 0)
 				break;
 			ptrend++;
 		}
+
 		if (ptrend != ptrstart)
-			fwrite(image + ptrstart, ptrend - ptrstart, 1, stdout);
-	} else if (csrno == 0x139) {
-		putchar(value);
+			fwrite(sys->image + ptrstart, ptrend - ptrstart, 1, stdout);
+		break;
+
+	case 0x139:
+		putchar(val);
 		fflush(stdout);
+		break;
 	}
 }
 
-static int32_t HandleOtherCSRRead(uint8_t *image, uint16_t csrno)
+static word_t read_other_csr(struct system *sys, struct inst inst)
 {
-	if (csrno == 0x140) {
+	if (inst.Zicsr.csr == 0x140) {
 		if (!IsKBHit())
 			return -1;
 		return ReadKBByte();

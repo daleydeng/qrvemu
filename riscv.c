@@ -14,44 +14,36 @@ void sys_alloc_memory(struct system *sys, word_t base, word_t size)
 
 }
 
-#ifndef MINIRV32_OTHERCSR_WRITE
-#define MINIRV32_OTHERCSR_WRITE(...) ;
-#endif
+#define READ_CSR(no, name) \
+	case no: rval = sys->core->name; break;
+#define WRITE_CSR(no, name) \
+	case no: sys->core->name = write_val; break;
 
-#ifndef MINIRV32_OTHERCSR_READ
-#define MINIRV32_OTHERCSR_READ(...) ;
-#endif
-
-#define read_csr(no, name) \
-	case no: rval = core->name; break;
-#define write_csr(no, name) \
-	case no: core->name = write_val; break;
-
-void handle_Zicsr(struct rvcore_rv32ima *core, struct inst inst, uint8_t *image) 
+word_t handle_Zicsr(struct system *sys, struct inst inst) 
 {
 	word_t rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
 	word_t uimm = inst.Zicsr.rs1_uimm;
-	word_t rs1 = core->regs[i_rs1];
+	word_t rs1 = sys->core->regs[i_rs1];
 	word_t write_val = rs1;
 
 	// https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
 	// Generally, support for Zicsr
 	switch (inst.Zicsr.csr) {
-	read_csr(0xC00, cycle.low)
-	read_csr(0xC80, cycle.low)
+	READ_CSR(0xC00, cycle.low)
+	READ_CSR(0xC80, cycle.low)
 
-	read_csr(0xf11, mvendorid)
-	read_csr(0x300, mstatus)
-	read_csr(0x301, misa)
-	read_csr(0x304, mie)
-	read_csr(0x305, mtvec)
+	READ_CSR(0xf11, mvendorid)
+	READ_CSR(0x300, mstatus)
+	READ_CSR(0x301, misa)
+	READ_CSR(0x304, mie)
+	READ_CSR(0x305, mtvec)
 
-	read_csr(0x340, mscratch)
-	read_csr(0x341, mepc)
-	read_csr(0x342, mcause)
-	read_csr(0x343, mtval)
-	read_csr(0x344, mip)
+	READ_CSR(0x340, mscratch)
+	READ_CSR(0x341, mepc)
+	READ_CSR(0x342, mcause)
+	READ_CSR(0x343, mtval)
+	READ_CSR(0x344, mip)
 
 	//case 0x3B0: rval = 0; break; //pmpaddr0
 	//case 0x3a0: rval = 0; break; //pmpcfg0
@@ -59,8 +51,8 @@ void handle_Zicsr(struct rvcore_rv32ima *core, struct inst inst, uint8_t *image)
 	//case 0xf13: rval = 0x00000000; break; //mimpid
 	//case 0xf14: rval = 0x00000000; break; //mhartid
 	default:
-		MINIRV32_OTHERCSR_READ(
-			inst.Zicsr.csr, rval);
+		if (sys->read_csr)
+			rval = sys->read_csr(sys, inst);
 		break;
 	}
 
@@ -86,21 +78,22 @@ void handle_Zicsr(struct rvcore_rv32ima *core, struct inst inst, uint8_t *image)
 	}
 
 	switch (inst.Zicsr.csr) {
-	write_csr(0x300, mstatus)
-	write_csr(0x304, mie)
-	write_csr(0x305, mtvec)
-	write_csr(0x340, mscratch)
-	write_csr(0x341, mepc)
-	write_csr(0x342, mcause)
-	write_csr(0x343, mtval)
-	write_csr(0x344, mip)
+	WRITE_CSR(0x300, mstatus)
+	WRITE_CSR(0x304, mie)
+	WRITE_CSR(0x305, mtvec)
+	WRITE_CSR(0x340, mscratch)
+	WRITE_CSR(0x341, mepc)
+	WRITE_CSR(0x342, mcause)
+	WRITE_CSR(0x343, mtval)
+	WRITE_CSR(0x344, mip)
 
 	default:
-		MINIRV32_OTHERCSR_WRITE(
-			inst.Zicsr.csr,
-			write_val);
+		if (sys->write_csr)
+			sys->write_csr(sys, inst, write_val);
 		break;
 	}
+
+	return rval;
 }
 
 

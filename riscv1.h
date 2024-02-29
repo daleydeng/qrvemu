@@ -19,14 +19,6 @@
 #define MINIRV32_HANDLE_MEM_LOAD_CONTROL(...) ;
 #endif
 
-#ifndef MINIRV32_OTHERCSR_WRITE
-#define MINIRV32_OTHERCSR_WRITE(...) ;
-#endif
-
-#ifndef MINIRV32_OTHERCSR_READ
-#define MINIRV32_OTHERCSR_READ(...) ;
-#endif
-
 #ifndef MINIRV32_CUSTOM_MEMORY_BUS
 #define MINIRV32_STORE4(ofs, val) *(uint32_t *)(image + ofs) = val
 #define MINIRV32_STORE2(ofs, val) *(uint16_t *)(image + ofs) = val
@@ -444,124 +436,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				{
 					if ((inst.v.funct3 & MASK(2))) // It's a Zicsr function.
 					{
-						int rs1imm = (ir >> 15) & 0x1f;
-						uint32_t rs1 = REG(rs1imm);
-						uint32_t writeval = rs1;
+						rval = handle_Zicsr(sys, inst);
 
-						// https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
-						// Generally, support for Zicsr
-						switch (inst.Zicsr.csr) {
-						case 0x340:
-							rval = CSR(mscratch);
-							break;
-						case 0x305:
-							rval = CSR(mtvec);
-							break;
-						case 0x304:
-							rval = CSR(mie);
-							break;
-						case 0xC00:
-							rval = core->cycle.low;
-							break;
-						case 0xC80:
-							rval = core->cycle.high;
-							break;
-						case 0x344:
-							rval = CSR(mip);
-							break;
-						case 0x341:
-							rval = CSR(mepc);
-							break;
-						case 0x300:
-							rval = CSR(mstatus);
-							break; //mstatus
-						case 0x342:
-							rval = CSR(mcause);
-							break;
-						case 0x343:
-							rval = CSR(mtval);
-							break;
-						case 0xf11:
-							rval = 0xff0ff0ff;
-							break; //mvendorid
-						case 0x301:
-							rval = 0x40401101;
-							break; //misa (XLEN=32, IMA+X)
-						//case 0x3B0: rval = 0; break; //pmpaddr0
-						//case 0x3a0: rval = 0; break; //pmpcfg0
-						//case 0xf12: rval = 0x00000000; break; //marchid
-						//case 0xf13: rval = 0x00000000; break; //mimpid
-						//case 0xf14: rval = 0x00000000; break; //mhartid
-						default:
-							MINIRV32_OTHERCSR_READ(
-								inst.Zicsr.csr, rval);
-							break;
-						}
-
-						switch (inst.Zicsr.funct3) {
-						case 1:
-							writeval = rs1;
-							break; //CSRRW
-						case 2:
-							writeval = rval | rs1;
-							break; //CSRRS
-						case 3:
-							writeval = rval & ~rs1;
-							break; //CSRRC
-						case 5:
-							writeval = rs1imm;
-							break; //CSRRWI
-						case 6:
-							writeval = rval |
-								   rs1imm;
-							break; //CSRRSI
-						case 7:
-							writeval = rval &
-								   ~rs1imm;
-							break; //CSRRCI
-						}
-
-						switch (inst.Zicsr.csr) {
-						case 0x340:
-							SETCSR(mscratch,
-							       writeval);
-							break;
-						case 0x305:
-							SETCSR(mtvec, writeval);
-							break;
-						case 0x304:
-							SETCSR(mie, writeval);
-							break;
-						case 0x344:
-							SETCSR(mip, writeval);
-							break;
-						case 0x341:
-							SETCSR(mepc, writeval);
-							break;
-						case 0x300:
-							SETCSR(mstatus,
-							       writeval);
-							break; //mstatus
-						case 0x342:
-							SETCSR(mcause,
-							       writeval);
-							break;
-						case 0x343:
-							SETCSR(mtval, writeval);
-							break;
-						//case 0x3a0: break; //pmpcfg0
-						//case 0x3B0: break; //pmpaddr0
-						//case 0xf11: break; //mvendorid
-						//case 0xf12: break; //marchid
-						//case 0xf13: break; //mimpid
-						//case 0xf14: break; //mhartid
-						//case 0x301: break; //misa
-						default:
-							MINIRV32_OTHERCSR_WRITE(
-								inst.Zicsr.csr,
-								writeval);
-							break;
-						}
 					} else if (inst.v.funct3 == 0x0) // "SYSTEM" 0b000
 					{
 						i_rd = 0;
