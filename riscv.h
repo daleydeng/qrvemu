@@ -119,8 +119,7 @@ struct MiniRV32IMAState {
 
 	uint32_t pc;
 	uint32_t mstatus;
-	uint32_t cyclel;
-	uint32_t cycleh;
+	dword_t cycle;
 
 	uint32_t timerl;
 	uint32_t timerh;
@@ -187,7 +186,6 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 	uint32_t trap = 0;
 	uint32_t rval = 0;
 	uint32_t pc = CSR(pc);
-	uint32_t cycle = CSR(cyclel);
 
 	if ((CSR(mip) & (1 << 7)) && (CSR(mie) & (1 << 7) /*mtie*/) &&
 	    (CSR(mstatus) & 0x8 /*mie*/)) {
@@ -198,7 +196,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 		for (int icount = 0; icount < count; icount++) {
 			uint32_t ir = 0;
 			rval = 0;
-			cycle++;
+			dword_inc(&state->cycle, 1);
+
 			uint32_t ofs_pc = pc - sys->ram_base;
 
 			if (ofs_pc >= sys->ram_size) {
@@ -574,7 +573,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 							rval = CSR(mie);
 							break;
 						case 0xC00:
-							rval = cycle;
+							rval = state->cycle.low;
+							break;
+						case 0xC80:
+							rval = state->cycle.high;
 							break;
 						case 0x344:
 							rval = CSR(mip);
@@ -862,10 +864,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 		pc += 4;
 	}
 
-	if (CSR(cyclel) > cycle)
-		CSR(cycleh)++;
-	SETCSR(cyclel, cycle);
-	SETCSR(pc, pc);
+	state->pc = pc;
 	return 0;
 }
 
