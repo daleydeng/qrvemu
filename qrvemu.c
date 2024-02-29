@@ -49,10 +49,10 @@ struct system sys = {
 };
 
 uint8_t *ram_image = 0;
-struct MiniRV32IMAState core;
+struct RVCore_RV32IMA core;
 const char *kernel_command_line = 0;
 
-static void DumpState(struct MiniRV32IMAState *core, uint8_t *ram_image);
+static void DumpState(struct RVCore_RV32IMA *core, uint8_t *ram_image);
 
 long load_file(void *ptr, size_t size, const char *fname, bool back_mapping)
 {
@@ -425,7 +425,7 @@ static int64_t SimpleReadNumberInt(const char *number, int64_t defaultNumber)
 	}
 }
 
-static void DumpState(struct MiniRV32IMAState *core, uint8_t *ram_image)
+static void DumpState(struct RVCore_RV32IMA *core, uint8_t *ram_image)
 {
 	uint32_t pc = core->pc;
 	uint32_t pc_offset = pc - sys.ram_base;

@@ -49,11 +49,6 @@ enum exception_type {
 	EXC_ECALL_FROM_M_MODE = 11,
 };
 
-struct system {
-	word_t ram_base;
-	word_t ram_size;
-};
-
 typedef struct {
 	word_t low, high;
 } dword_t;
@@ -175,3 +170,13 @@ struct RVCore_RV32IMA {
 	word_t misa;
 	
 } __attribute__((aligned(ALIGN)));
+
+struct system {
+    struct RVCore_RV32IMA *core;
+
+	word_t ram_base;
+	word_t ram_size;
+    uint8_t *image;
+    word_t (*read_csr)(struct system *sys, struct inst);
+    void (*write_csr)(struct system *sys, struct inst, word_t val);
+};
