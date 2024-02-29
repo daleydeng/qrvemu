@@ -5,89 +5,9 @@
 #ifndef _RISCV_H
 #define _RISCV_H
 
-#include <stdint.h>
-#include <stdbool.h>
-
 #include <stdio.h>
 #include <stdlib.h>
-
-typedef uint32_t word_t;
-typedef uint32_t inst_t;
-
-#define ALIGN 8
-
-#define MASK(n) ((1 << (n)) - 1)
-#define get_bit(reg, b) ((reg) & 1 << (b))
-#define get_bit2(reg, b) (((reg) << b) & 0x03)
-#define set_bit(reg, b) ((*(reg)) |= 1 << (b))
-#define clear_bit(reg, b) ((*(reg)) &=~ 1 << (b))
-
-static inline void copy_bit(word_t *reg, int b, bool val)
-{
-	if (val) {
-		set_bit(reg, b);
-	} else {
-		clear_bit(reg, b);
-	}
-}
-
-static inline void copy_bit2(word_t *reg, int b, int val)
-{
-	copy_bit(reg, b, val & 0x01);
-	copy_bit(reg, b, val & 0x02);
-}
-
-enum mstatus { MSTATUS_MIE = 3, MSTATUS_MPIE = 7, MSTATUS_MPP = 11 };
-
-enum trap_type { TRAP_NONE, INTERRUPT, EXCEPTION };
-
-enum interrupt_type { INTR_MACHINE_TIMER = 7 };
-
-enum exception_type {
-	EXC_NONE = -1,
-	EXC_INST_ADDR_MISALIGNED = 0,
-	EXC_INST_ACCESS_FAULT = 1,
-	EXC_ILLEGAL_INST = 2,
-	EXC_BREAKPOINT = 3,
-	EXC_LOAD_ADDR_MISALIGNED = 4,
-	EXC_LOAD_ACCESS_FAULT = 5,
-	EXC_STORE_ADDR_MISALIGNED = 6,
-	EXC_STORE_ACCESS_FAULT = 7,
-	EXC_ECALL_FROM_U_MODE = 8,
-	EXC_ECALL_FROM_S_MODE = 9,
-	EXC_ECALL_FROM_M_MODE = 11,
-};
-
-struct system {
-	word_t ram_base;
-	word_t ram_size;
-};
-
-typedef struct {
-	word_t low, high;
-} dword_t;
-
-static inline void dword_inc(dword_t *val, word_t delta)
-{
-	word_t new = val->low + delta;
-	if (new < val->low) {
-		val->high++;
-	}
-	val->low = new;
-}
-
-static inline bool dword_cmp(dword_t a, dword_t b)
-{
-	return (a.high > b.high || (a.high == b.high && a.low > b.low));
-}
-
-static inline bool dword_is_zero(dword_t a)
-{
-	return a.low == 0 && a.high == 0;
-}
-
-enum priv { PRIV_USER = 0x00, PRIV_SUPERVISOR = 0x01, PRIV_MACHINE = 0x03 };
-
+#include "riscv_types.h"
 
 #ifndef MINIRV32_POSTEXEC
 #define MINIRV32_POSTEXEC(...) ;
@@ -120,123 +40,31 @@ enum priv { PRIV_USER = 0x00, PRIV_SUPERVISOR = 0x01, PRIV_MACHINE = 0x03 };
 #define MINIRV32_LOAD1_SIGNED(ofs) *(int8_t *)(image + ofs)
 #endif
 
-enum reg_name {
-	R_zero = 0,
-	R_ra = 1,
-	R_sp = 2,
-	R_gp = 3,
-	R_tp = 4,
-	R_t0 = 5,
-	R_t1 = 6,
-	R_t2 = 7,
-	R_s0 = 8,
-	R_fp = 8,
-	R_s1 = 9,
-	R_a0 = 10,
-	R_a1 = 11,
-	R_a2 = 12,
-	R_a3 = 13,
-	R_a4 = 14,
-	R_a5 = 15,
-	R_a6 = 16,
-	R_a7 = 17,
-	R_s2 = 18,
-	R_s3 = 19,
-	R_s4 = 20,
-	R_s5 = 21,
-	R_s6 = 22,
-	R_s7 = 23,
-	R_s8 = 24,
-	R_s9 = 25,
-	R_s10 = 26,
-	R_s11 = 27,
-	R_t3 = 28,
-	R_t4 = 29,
-	R_t5 = 30,
-	R_t6 = 31,
-};
-
-struct MiniRV32IMAState {
-	uint32_t regs[32];
-
-	uint32_t pc;
-	uint32_t mstatus;
-	dword_t cycle;
-
-	dword_t timer, timermatch;
-
-	uint32_t mscratch;
-	uint32_t mtvec;
-	uint32_t mie;
-	uint32_t mip;
-
-	uint32_t mepc;
-	uint32_t mtval;
-	uint32_t mcause;
-
-	enum priv priv;
-	bool wfi;
-	word_t reservation;
-	
-} __attribute__((aligned(ALIGN)));
-
-struct inst {
-	union {
-		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
-		} v;
-		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
-			word_t rs1:5;
-			word_t rs2:5;
-			word_t funct7:7;
-		} priv_R;
-		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
-			word_t rs1:5;
-			word_t imm:12;
-		} priv_I;
-		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
-			word_t rs1_uimm:5;
-			word_t csr:12;
-		} Zicsr;
-	};
-} __attribute__((packed));
-
-int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state, uint8_t *image,
+int32_t MiniRV32IMAStep(struct system *sys, struct RVCore_RV32IMA *state, uint8_t *image,
 			uint32_t vProcAddress, uint32_t elapsedUs, int count);
 
 #ifndef MINIRV32_CUSTOM_INTERNALS
-#define CSR(x) state->x
+#define CSR(x) core->x
 #define SETCSR(x, val)          \
 	{                       \
-		state->x = val; \
+		core->x = val; \
 	}
-#define REG(x) state->regs[x]
+#define REG(x) core->regs[x]
 #define REGSET(x, val)                \
 	{                             \
-		state->regs[x] = val; \
+		core->regs[x] = val; \
 	}
 #endif
 
-int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
+int32_t MiniRV32IMAStep(struct system *sys, struct RVCore_RV32IMA *core,
 					  uint8_t *image, uint32_t vProcAddress,
 					  uint32_t elapsedUs, int count)
 {
-	dword_inc(&state->timer, elapsedUs);
+	dword_inc(&core->timer, elapsedUs);
 
 	// Handle Timer interrupt.
-	if (!dword_is_zero(state->timermatch) && dword_cmp(state->timer, state->timermatch)) {
-		state->wfi = false;
+	if (!dword_is_zero(core->timermatch) && dword_cmp(core->timer, core->timermatch)) {
+		core->wfi = false;
 		CSR(mip) |=
 			1
 			<< 7; //MTIP of MIP // https://stackoverflow.com/a/61916199/2926815  Fire interrupt.
@@ -244,7 +72,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 		CSR(mip) &= ~(1 << 7);
 	}
 
-	if (state->wfi)
+	if (core->wfi)
 		return 1;
 
 	uint32_t trap = 0;
@@ -260,7 +88,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 		for (int icount = 0; icount < count; icount++) {
 			word_t ir = 0;
 			rval = 0;
-			dword_inc(&state->cycle, 1);
+			dword_inc(&core->cycle, 1);
 
 			word_t ofs_pc = pc - sys->ram_base;
 
@@ -376,10 +204,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						{
 							if (rsval ==
 							    0x1100bffc) // https://chromitem-soc.readthedocs.io/en/latest/clint.html
-								rval = state->timer.high;
+								rval = core->timer.high;
 							else if (rsval ==
 								 0x1100bff8)
-								 rval = state->timer.low;
+								 rval = core->timer.low;
 							else
 								MINIRV32_HANDLE_MEM_LOAD_CONTROL(
 									rsval,
@@ -436,11 +264,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 							// Should be stuff like SYSCON, 8250, CLNT
 							if (addy ==
 							    0x11004004) //CLNT
-								state->timermatch.high =
+								core->timermatch.high =
 									rs2;
 							else if (addy ==
 								 0x11004000) //CLNT
-								state->timermatch.low =
+								core->timermatch.low =
 									rs2;
 							else if (addy ==
 								 0x11100000) //SYSCON (reboot, poweroff, etc.)
@@ -633,10 +461,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 							rval = CSR(mie);
 							break;
 						case 0xC00:
-							rval = state->cycle.low;
+							rval = core->cycle.low;
 							break;
 						case 0xC80:
-							rval = state->cycle.high;
+							rval = core->cycle.high;
 							break;
 						case 0x344:
 							rval = CSR(mip);
@@ -743,7 +571,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						{
 							CSR(mstatus) |=
 								8; //Enable interrupts
-							state->wfi = true;
+							core->wfi = true;
 							SETCSR(pc, pc + 4);
 							return 1;
 						} else if (((csrno & 0xff) ==
@@ -758,11 +586,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 							       ((startmstatus &
 								 0x80) >>
 								4) |
-								       (state->priv
+								       (core->priv
 									<< 11) |
 								       0x80);
 
-							state->priv = ((startmstatus >>
+							core->priv = ((startmstatus >>
 									11) &
 								       3);
 
@@ -770,7 +598,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						} else {
 							switch (csrno) {
 							case 0:
-								trap = (state->priv == PRIV_MACHINE) ?
+								trap = (core->priv == PRIV_MACHINE) ?
 									       (11 +
 										1) :
 									       (8 +
@@ -812,10 +640,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 						switch (irmid) {
 						case 2: //LR.W (0b00010)
 							dowrite = 0;
-							state->reservation = rs1;
+							core->reservation = rs1;
 							break;
 						case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
-							rval = state->reservation != rs1;
+							rval = core->reservation != rs1;
 							dowrite =
 								!rval; // Only write if slot is valid.
 							break;
@@ -903,17 +731,17 @@ int32_t MiniRV32IMAStep(struct system *sys, struct MiniRV32IMAState *state,
 		//CSR( mstatus ) & 8 = MIE, & 0x80 = MPIE
 		// On an interrupt, the system moves current MIE into MPIE
 		SETCSR(mstatus, ((CSR(mstatus) & 0x08) << 4) |
-					(state->priv << 11));
+					(core->priv << 11));
 		pc = (CSR(mtvec) - 4);
 
 		// If trapping, always enter machine mode.
-		state->priv = PRIV_MACHINE;
+		core->priv = PRIV_MACHINE;
 
 		trap = 0;
 		pc += 4;
 	}
 
-	state->pc = pc;
+	core->pc = pc;
 	return 0;
 }
 
