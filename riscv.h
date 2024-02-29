@@ -3,6 +3,7 @@
 
 typedef uint32_t word_t;
 typedef uint32_t inst_t;
+#define XLEN (sizeof(word_t) * 8)
 
 #define ALIGN 8
 
@@ -10,8 +11,8 @@ typedef uint32_t inst_t;
 #define get_bit(reg, b) ((reg) & 1 << (b))
 #define get_bit2(reg, b) (((reg) >> b) & 0x3)
 #define set_bit(reg, b) ((*(reg)) |= 1 << (b))
-#define clear_bit(reg, b) ((*(reg)) &=~ 1 << (b))
-#define clear_bit2(reg, b) ((*(reg)) &=~ 0x3 << (b))
+#define clear_bit(reg, b) ((*(reg)) &=~ (1 << (b)))
+#define clear_bit2(reg, b) ((*(reg)) &=~ (0x3 << (b)))
 
 static inline void copy_bit(word_t *reg, int b, bool val)
 {
@@ -25,7 +26,7 @@ static inline void copy_bit(word_t *reg, int b, bool val)
 static inline void copy_bit2(word_t *reg, int b, int val)
 {
 	copy_bit(reg, b, val & 0x01);
-	copy_bit(reg, b, val & 0x02);
+	copy_bit(reg, b + 1, val & 0x02);
 }
 
 enum mstatus { MSTATUS_MIE = 3, MSTATUS_MPIE = 7, MSTATUS_MPP = 11 };
@@ -189,6 +190,13 @@ static inline word_t sys_ram_end(struct system *sys) {
 void sys_alloc_memory(struct system *sys, word_t base, word_t size);
 void dump_sys(struct system *sys);
 
+static inline bool check_interrupt(const struct rvcore_rv32ima *core, enum interrupt_type bit)
+{
+	return get_bit(core->mstatus, MSTATUS_MIE) &&
+	       get_bit(core->mip, bit) && get_bit(core->mie, bit);
+}
+
 word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys);
 void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst);
 void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst);
+void handle_interrupt(struct rvcore_rv32ima *core, enum interrupt_type bit);

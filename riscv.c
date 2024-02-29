@@ -40,6 +40,21 @@ void dump_sys(struct system *sys)
 	       regs[28], regs[29], regs[30], regs[31]);
 }
 
+void handle_interrupt(struct rvcore_rv32ima *core, enum interrupt_type bit)
+{
+	core->mcause = 1 << (XLEN - 1) | bit;
+	core->mtval = 0;
+	core->mepc = core->pc;
+	core->pc = core->mtvec;
+
+	copy_bit(&core->mstatus, MSTATUS_MPIE,
+			get_bit(core->mstatus, MSTATUS_MIE));
+	clear_bit(&core->mstatus, MSTATUS_MIE);
+	copy_bit2(&core->mstatus, MSTATUS_MPP, core->priv);
+
+	core->priv = PRIV_MACHINE;
+}
+
 #define READ_CSR(no, name) \
 	case no: rval = core->name; break;
 #define WRITE_CSR(no, name) \
@@ -140,7 +155,7 @@ void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst)
 	// sets pc = mepc.
 
 	core->priv = get_bit2(core->mstatus, MSTATUS_MPP);
-	clear_bit2(&core->mstatus, MSTATUS_MPP);
+	// clear_bit2(&core->mstatus, MSTATUS_MPP); ??? dont work here
 	copy_bit(&core->mstatus, MSTATUS_MIE, get_bit(core->mstatus, MSTATUS_MPIE));
 	set_bit(&core->mstatus, MSTATUS_MPIE);
 }
