@@ -3,8 +3,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#include "q64mb.h"
-
 int fail_on_all_faults = 0;
 
 static int64_t SimpleReadNumberInt(const char *number, int64_t defaultNumber);
@@ -196,14 +194,10 @@ restart: {
 			fclose(f);
 		}
 	} else {
-		// Load a default dtb.
-		dtb_ptr = sys.ram_size - sizeof(q64mb_dtb) -
-			  sizeof(struct MiniRV32IMAState);
-		memcpy(ram_image + dtb_ptr, q64mb_dtb, sizeof(q64mb_dtb));
-		if (kernel_command_line) {
-			strncpy((char *)(ram_image + dtb_ptr + 0xc0),
-				kernel_command_line, 54);
-		}
+		fprintf(stderr,
+			"Error: Could not open dtb \"%s\"\n",
+			dtb_file_name);
+		return -9;
 	}
 }
 
