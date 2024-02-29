@@ -40,10 +40,10 @@ void dump_sys(struct system *sys)
 	       regs[28], regs[29], regs[30], regs[31]);
 }
 
-void handle_interrupt(struct rvcore_rv32ima *core, enum interrupt_type bit)
+void handle_trap(struct rvcore_rv32ima *core, word_t mcause, word_t mtval)
 {
-	core->mcause = 1 << (XLEN - 1) | bit;
-	core->mtval = 0;
+	core->mcause = mcause;
+	core->mtval = mtval;
 	core->mepc = core->pc;
 	core->pc = core->mtvec;
 

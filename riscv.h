@@ -196,7 +196,14 @@ static inline bool check_interrupt(const struct rvcore_rv32ima *core, enum inter
 	       get_bit(core->mip, bit) && get_bit(core->mie, bit);
 }
 
+void handle_trap(struct rvcore_rv32ima *core, word_t mcause, word_t mtval);
+static inline void handle_interrupt(struct rvcore_rv32ima *core, enum interrupt_type bit)
+{
+	handle_trap(core, 1 << (XLEN - 1) | bit, 0);
+}
+
+
 word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys);
 void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst);
 void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst);
-void handle_interrupt(struct rvcore_rv32ima *core, enum interrupt_type bit);
+

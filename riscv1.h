@@ -70,24 +70,25 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		handle_interrupt(core, INTR_MACHINE_TIMER);
 		return 0;
 	}
-	
+
 	uint32_t trap = 0;
 	uint32_t rval = 0;
-	uint32_t pc = core->pc;
+
 	for (int icount = 0; icount < count; icount++) {
 		word_t ir = 0;
 		rval = 0;
 		dword_inc(&core->cycle, 1);
 
-		word_t ofs_pc = pc - sys->ram_base;
+		word_t ofs_pc = core->pc - sys->ram_base;
 
 		if (ofs_pc >= sys->ram_size) {
-			trap = 1 +
-			       1; // Handle access violation on instruction read.
+			trap = 1 + 1;
 			break;
+
 		} else if (ofs_pc & 3) {
 			trap = 1 + 0; //Handle PC-misaligned access
 			break;
+			
 		} else {
 			ir = MINIRV32_LOAD4(ofs_pc);
 			struct inst inst = *((struct inst *)&ir);
@@ -98,7 +99,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				rval = (ir & 0xfffff000);
 				break;
 			case 0x17: // AUIPC (0b0010111)
-				rval = pc + (ir & 0xfffff000);
+				rval = core->pc + (ir & 0xfffff000);
 				break;
 			case 0x6F: // JAL (0b1101111)
 			{
@@ -109,8 +110,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				if (reladdy & 0x00100000)
 					reladdy |=
 						0xffe00000; // Sign extension.
-				rval = pc + 4;
-				pc = pc + reladdy - 4;
+				rval = core->pc + 4;
+				core->pc = core->pc + reladdy - 4;
 				break;
 			}
 			case 0x67: // JALR (0b1100111)
@@ -118,8 +119,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				uint32_t imm = ir >> 20;
 				int32_t imm_se =
 					imm | ((imm & 0x800) ? 0xfffff000 : 0);
-				rval = pc + 4;
-				pc = ((REG((ir >> 15) & 0x1f) + imm_se) & ~1) -
+				rval = core->pc + 4;
+				core->pc = ((REG((ir >> 15) & 0x1f) + imm_se) & ~1) -
 				     4;
 				break;
 			}
@@ -133,33 +134,33 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 					immm4 |= 0xffffe000;
 				int32_t rs1 = REG((ir >> 15) & 0x1f);
 				int32_t rs2 = REG((ir >> 20) & 0x1f);
-				immm4 = pc + immm4 - 4;
+				immm4 = core->pc + immm4 - 4;
 				i_rd = 0;
 				switch ((ir >> 12) & 0x7) {
 				// BEQ, BNE, BLT, BGE, BLTU, BGEU
 				case 0:
 					if (rs1 == rs2)
-						pc = immm4;
+						core->pc = immm4;
 					break;
 				case 1:
 					if (rs1 != rs2)
-						pc = immm4;
+						core->pc = immm4;
 					break;
 				case 4:
 					if (rs1 < rs2)
-						pc = immm4;
+						core->pc = immm4;
 					break;
 				case 5:
 					if (rs1 >= rs2)
-						pc = immm4;
+						core->pc = immm4;
 					break; //BGE
 				case 6:
 					if ((uint32_t)rs1 < (uint32_t)rs2)
-						pc = immm4;
+						core->pc = immm4;
 					break; //BLTU
 				case 7:
 					if ((uint32_t)rs1 >= (uint32_t)rs2)
-						pc = immm4;
+						core->pc = immm4;
 					break; //BGEU
 				default:
 					trap = (2 + 1);
@@ -244,7 +245,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 						else if (addy ==
 							 0x11100000) //SYSCON (reboot, poweroff, etc.)
 						{
-							SETCSR(pc, pc + 4);
+							SETCSR(pc, core->pc + 4);
 							return rs2; // NOTE: PC will be PC of Syscon.
 						} else
 							MINIRV32_HANDLE_MEM_STORE_CONTROL(
@@ -407,14 +408,14 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 					    0x105) //WFI (Wait for interrupts)
 					{
 						proc_inst_wfi(core, inst);
-						core->pc = pc + 4;
+						core->pc = core->pc + 4;
 						return 1;
 
 					} else if (((csrno & 0xff) ==
 						    0x02)) // MRET
 					{
 						proc_inst_mret(core, inst);
-						pc = core->mepc - 4;
+						core->pc = core->mepc - 4;
 
 					} else {
 						i_rd = 0;
@@ -524,37 +525,14 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 
 		MINIRV32_POSTEXEC(pc, ir, trap);
 
-		pc += 4;
+		core->pc += 4;
 	}
+
 
 	// Handle traps and interrupts.
-	if (trap) {
-		if (trap &
-		    0x80000000) // If prefixed with 1 in MSB, it's an interrupt, not a trap.
-		{
-			SETCSR(mcause, trap);
-			SETCSR(mtval, 0);
-			pc += 4; // PC needs to point to where the PC will return to.
-		} else {
-			SETCSR(mcause, trap - 1);
-			SETCSR(mtval, (trap > 5 && trap <= 8) ? rval : pc);
-		}
-		SETCSR(mepc,
-		       pc); //TRICKY: The kernel advances mepc automatically.
-		//CSR( mstatus ) & 8 = MIE, & 0x80 = MPIE
-		// On an interrupt, the system moves current MIE into MPIE
-		SETCSR(mstatus,
-		       ((CSR(mstatus) & 0x08) << 4) | (core->priv << 11));
-		pc = (CSR(mtvec) - 4);
-
-		// If trapping, always enter machine mode.
-		core->priv = PRIV_MACHINE;
-
-		trap = 0;
-		pc += 4;
-	}
-
-	core->pc = pc;
+	if (trap)
+		handle_trap(core, trap - 1, (trap > 5 && trap <= 8) ? rval : core->pc);
+	
 	return 0;
 }
 
