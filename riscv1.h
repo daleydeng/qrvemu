@@ -386,7 +386,9 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		{
 			if ((inst.funct3 & MASK(2))) // Zicsr function.
 			{
-				rval = proc_inst_Zicsr(inst, core, plat);
+				proc_inst_Zicsr(inst, core, plat);
+
+				rd_writed = true;
 
 			} else if (inst.funct3 == 0x0) // "SYSTEM" 0b000
 			{
@@ -399,7 +401,7 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 
 				} else if (((csrno & 0xff) == 0x02)) // MRET
 				{
-					proc_inst_mret(inst, core);
+					proc_inst_mret(inst, core, plat);
 					core->pc = core->mepc - 4;
 
 				} else {

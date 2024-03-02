@@ -59,7 +59,7 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 #define WRITE_CSR(no, name) \
 	case no: core->name = write_val; break;
 
-xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) 
+void proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) 
 {
 	xlenbits rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
@@ -135,7 +135,7 @@ xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platfor
 		break;
 	}
 
-	return rval;
+	write_rd(core, inst.Zicsr.rd, rval);
 }
 
 void proc_inst_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
@@ -145,7 +145,7 @@ void proc_inst_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *pla
 	plat->wfi = true;
 }
 
-void proc_inst_mret(ast_t inst, struct rvcore_rv32ima *core)
+void proc_inst_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
 	assert(inst.priv_I.imm == 0x302); // 0b0011 0000 0010
 	// refer Volume II: RISC-V Privileged Architectures V20211203 manual 8.6.4 Trap Return

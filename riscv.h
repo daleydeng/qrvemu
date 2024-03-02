@@ -403,6 +403,7 @@ static inline void handle_exception(struct rvcore_rv32ima *core,
 	handle_trap(core, mcause, mtval);
 }
 
-xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+void proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 void proc_inst_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-void proc_inst_mret(ast_t inst, struct rvcore_rv32ima *core);
+void proc_inst_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+void proc_inst_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
