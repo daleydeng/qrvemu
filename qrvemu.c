@@ -3,6 +3,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <signal.h>
+#include <sys/ioctl.h>
+#include <sys/time.h>
+#include <termios.h>
+#include <unistd.h>
+
+#include "utils.h"
+#include "riscv.h"
 
 int fail_on_all_faults = 0;
 
@@ -10,24 +18,14 @@ static int64_t SimpleReadNumberInt(const char *number, int64_t defaultNumber);
 static uint64_t GetTimeMicroseconds();
 static void ResetKeyboardInput();
 static void CaptureKeyboardInput();
-static uint32_t HandleControlStore(uint32_t addy, uint32_t val);
-static uint32_t HandleControlLoad(uint32_t addy);
 static void MiniSleep();
 static int IsKBHit();
 static int ReadKBByte();
 
-
-#define MINIRV32_HANDLE_MEM_STORE_CONTROL(addy, val) \
-	if (HandleControlStore(addy, val))           \
-		return val;
-#define MINIRV32_HANDLE_MEM_LOAD_CONTROL(addy, rval) \
-	rval = HandleControlLoad(addy);
-
-#include "riscv1.h"
-#include "utils.h"
-
 static xlenbits read_other_csr(struct platform *plat, ast_t inst);
 static void write_other_csr(struct platform *plat, ast_t inst, xlenbits val);
+static int handle_plat_store(struct platform *plat, xlenbits addy, xlenbits val);
+static xlenbits handle_plat_load(struct platform *plat, xlenbits addy);
 
 size_t RAM_BASE = 0x80000000;
 size_t RAM_SIZE = 64 * 1024 * 1024;
@@ -142,6 +140,8 @@ int main(int argc, char **argv)
 	plat->dram = dram;
 	plat->read_csr = read_other_csr;
 	plat->write_csr = write_other_csr;
+	plat->load = handle_plat_load;
+	plat->store = handle_plat_store;
 
 	long flen = 0;
 
@@ -214,15 +214,7 @@ restart:
 	dump_plat(plat);
 }
 
-//////////////////////////////////////////////////////////////////////////
-// Platform-specific functionality
-//////////////////////////////////////////////////////////////////////////
 
-#include <signal.h>
-#include <sys/ioctl.h>
-#include <sys/time.h>
-#include <termios.h>
-#include <unistd.h>
 
 static void CtrlC()
 {
@@ -296,7 +288,7 @@ static int IsKBHit()
 // Rest of functions functionality
 //////////////////////////////////////////////////////////////////////////
 
-static uint32_t HandleControlStore(uint32_t addy, uint32_t val)
+static int handle_plat_store(struct platform *plat, xlenbits addy, xlenbits val)
 {
 	if (addy == 0x10000000) // UART 8250 / 16550 Data Buffer
 	{
@@ -306,7 +298,7 @@ static uint32_t HandleControlStore(uint32_t addy, uint32_t val)
 	return 0;
 }
 
-static uint32_t HandleControlLoad(uint32_t addy)
+static xlenbits handle_plat_load(struct platform *plat, xlenbits addy)
 {
 	// Emulating a 8250 / 16550 UART
 	if (addy == 0x10000005)

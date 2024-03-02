@@ -1,3 +1,6 @@
+#ifndef _RISCV_H
+#define _RISCV_H
+
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
@@ -422,6 +425,8 @@ struct platform {
 
 	xlenbits (*read_csr)(struct platform *plat, ast_t inst);
 	void (*write_csr)(struct platform *plat, ast_t inst, xlenbits val);
+	xlenbits (*load)(struct platform *plat, xlenbits addr);
+	int (*store)(struct platform *plat, xlenbits addr, xlenbits val);
 };
 
 
@@ -452,3 +457,9 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat
 int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 int execute_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+
+
+int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
+		    uint8_t *image, uint32_t vProcAddress, uint32_t elapsedUs,
+		    int count);
+#endif
