@@ -34,28 +34,6 @@ static inline void copy_bit2(xlenbits *reg, int b, int val)
 
 enum trap_type { TRAP_NONE, INTERRUPT, EXCEPTION };
 
-enum ExceptionType {
-	E_Fetch_Addr_Align,
-	E_Fetch_Access_Fault,
-	E_Illegal_Instr,
-	E_Breakpoint,
-	E_Load_Addr_Align,
-	E_Load_Access_Fault,
-	E_SAMO_Addr_Align,
-	E_SAMO_Access_Fault,
-	E_U_EnvCall,
-	E_S_EnvCall,
-	E_Reserved_10,
-	E_M_EnvCall,
-	E_Fetch_Page_Fault,
-	E_Load_Page_Fault,
-	E_Reserved_14,
-	E_SAMO_Page_Fault,
-
-	/* extensions */
-	E_Extension,
-};
-
 typedef struct {
 	xlenbits low, high;
 } dword_t;
@@ -228,41 +206,37 @@ typedef union {
 
 enum InterruptType {
 	I_U_Software = 0,
-	I_S_Software,
-	I_M_Software,
-	I_U_Timer,
-	I_S_Timer,
-	I_M_Timer,
-	I_U_External,
-	I_S_External,
-	I_M_External
+	I_S_Software = 1,
+	I_M_Software = 3,
+	I_U_Timer = 4,
+	I_S_Timer = 5,
+	I_M_Timer = 7,
+	I_U_External = 8,
+	I_S_External = 9,
+	I_M_External = 11,
 };
 
-static inline int interruptType_to_bits(enum InterruptType i)
-{
-	switch (i) {
-	case I_U_Software:
-		return 0;
-	case I_S_Software:
-		return 0x01;
-	case I_M_Software:
-		return 0x03;
-	case I_U_Timer:
-		return 0x04;
-	case I_S_Timer:
-		return 0x05;
-	case I_M_Timer:
-		return 0x07;
-	case I_U_External:
-		return 0x08;
-	case I_S_External:
-		return 0x09;
-	case I_M_External:
-		return 0x0b;
-	default:
-		assert(0);
-	}
-}
+enum ExceptionType {
+	E_Fetch_Addr_Align = 0,
+	E_Fetch_Access_Fault,
+	E_Illegal_Instr,
+	E_Breakpoint,
+	E_Load_Addr_Align,
+	E_Load_Access_Fault,
+	E_SAMO_Addr_Align,
+	E_SAMO_Access_Fault,
+	E_U_EnvCall,
+	E_S_EnvCall,
+	E_Reserved_10,
+	E_M_EnvCall,
+	E_Fetch_Page_Fault,
+	E_Load_Page_Fault,
+	E_Reserved_14,
+	E_SAMO_Page_Fault,
+
+	/* extensions */
+	// E_Extension,
+};
 
 typedef union {
 	xlenbits bits;
@@ -284,6 +258,14 @@ typedef union {
 	};
 } interrupts_t;
 
+typedef union {
+	xlenbits bits;
+	struct {
+		xlenbits cause : XLEN - 1;
+		xlenbits is_interrupt : 1;
+	};
+} mcause_t;
+
 struct rvcore_rv32ima {
 	regtype regs[32];
 
@@ -293,14 +275,15 @@ struct rvcore_rv32ima {
 	dword_t timer, timermatch;
 
 	mstatus_t mstatus;
-	xlenbits mscratch;
 	mtvec_t mtvec;
 	interrupts_t mie;
 	interrupts_t mip;
 
-	regtype mepc;
-	regtype mtval;
-	regtype mcause;
+	xlenbits mepc;
+	xlenbits mtval;
+	xlenbits mscratch;
+
+	mcause_t mcause;
 
 	enum priv priv;
 	bool wfi;
@@ -339,18 +322,25 @@ static inline xlenbits sys_ram_end(struct system *sys)
 void sys_alloc_memory(struct system *sys, xlenbits base, xlenbits size);
 void dump_sys(struct system *sys);
 
-static inline bool check_interrupt(const struct rvcore_rv32ima *core, enum InterruptType intr)
+static inline bool check_interrupt(const struct rvcore_rv32ima *core,
+				   enum InterruptType intr)
 {
-	int bit = interruptType_to_bits(intr);
-	return core->mstatus.MIE && get_bit(core->mip.bits, bit) &&
-	       get_bit(core->mie.bits, bit);
+	return core->mstatus.MIE && get_bit(core->mip.bits, intr) &&
+	       get_bit(core->mie.bits, intr);
 }
 
-void handle_trap(struct rvcore_rv32ima *core, xlenbits mcause, xlenbits mtval);
+void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval);
 static inline void handle_interrupt(struct rvcore_rv32ima *core,
 				    enum InterruptType intr)
 {
-	handle_trap(core, 1 << (XLEN - 1) | interruptType_to_bits(intr), 0);
+	mcause_t mcause = { .is_interrupt = true, .cause = intr };
+	handle_trap(core, mcause, 0);
+}
+static inline void handle_exception(struct rvcore_rv32ima *core,
+				    enum ExceptionType exc, xlenbits mtval)
+{
+	mcause_t mcause = { .is_interrupt = false, .cause = exc};
+	handle_trap(core, mcause, mtval);
 }
 
 xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst,

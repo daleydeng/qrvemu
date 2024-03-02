@@ -40,7 +40,7 @@ void dump_sys(struct system *sys)
 	       regs[28], regs[29], regs[30], regs[31]);
 }
 
-void handle_trap(struct rvcore_rv32ima *core, xlenbits mcause, xlenbits mtval)
+void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 {
 	core->mcause = mcause;
 	core->mtval = mtval;
@@ -81,7 +81,7 @@ xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst, struct system 
 
 	READ_CSR(0x340, mscratch)
 	READ_CSR(0x341, mepc)
-	READ_CSR(0x342, mcause)
+	READ_CSR(0x342, mcause.bits)
 	READ_CSR(0x343, mtval)
 	READ_CSR(0x344, mip.bits)
 
@@ -123,7 +123,7 @@ xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst, struct system 
 	WRITE_CSR(0x305, mtvec.bits)
 	WRITE_CSR(0x340, mscratch)
 	WRITE_CSR(0x341, mepc)
-	WRITE_CSR(0x342, mcause)
+	WRITE_CSR(0x342, mcause.bits)
 	WRITE_CSR(0x343, mtval)
 	WRITE_CSR(0x344, mip.bits)
 
