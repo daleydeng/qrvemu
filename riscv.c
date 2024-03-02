@@ -268,17 +268,6 @@ int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 // 	}
 // }
 
-#define CSR(x) core->x
-#define SETCSR(x, val)         \
-	{                      \
-		core->x = val; \
-	}
-#define REG(x) core->regs[x]
-#define REGSET(x, val)               \
-	{                            \
-		core->regs[x] = val; \
-	}
-
 int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		    uint8_t *image, uint32_t vProcAddress, uint32_t elapsedUs,
 		    int count)
@@ -512,9 +501,9 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		{
 			uint32_t imm = ir >> 20;
 			imm = imm | ((imm & 0x800) ? 0xfffff000 : 0);
-			uint32_t rs1 = REG((ir >> 15) & 0x1f);
+			regtype rs1 = rX(core, inst.R.rs1);
 			uint32_t is_reg = !!(ir & 0x20);
-			uint32_t rs2 = is_reg ? REG(imm & 0x1f) : imm;
+			regtype rs2 = is_reg ? rX(core, inst.R.rs2) : imm;
 			xlenbits rval = 0;
 
 			if (is_reg && (ir & 0x02000000)) {
@@ -684,8 +673,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		}
 		case 0x2f: // RV32A (0b00101111)
 		{
-			uint32_t rs1 = REG((ir >> 15) & 0x1f);
-			uint32_t rs2 = REG((ir >> 20) & 0x1f);
+			regtype rs1 = rX(core, inst.R.rs1);
+			regtype rs2 = rX(core, inst.R.rs2);
 			uint32_t irmid = (ir >> 27) & 0x1f;
 			xlenbits rval = 0;
 
