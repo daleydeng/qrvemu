@@ -45,7 +45,7 @@ void handle_trap(struct rvcore_rv32ima *core, xlenbits mcause, xlenbits mtval)
 	core->mcause = mcause;
 	core->mtval = mtval;
 	core->mepc = core->pc;
-	core->pc = core->mtvec;
+	core->pc = core->mtvec.bits;
 
 	core->mstatus.MPIE = core->mstatus.MIE;
 	core->mstatus.MIE = false;
@@ -59,7 +59,7 @@ void handle_trap(struct rvcore_rv32ima *core, xlenbits mcause, xlenbits mtval)
 #define WRITE_CSR(no, name) \
 	case no: core->name = write_val; break;
 
-xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys) 
+xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst, struct system *sys) 
 {
 	xlenbits rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
@@ -77,7 +77,7 @@ xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct s
 	READ_CSR(0x300, mstatus.bits)
 	READ_CSR(0x301, misa)
 	READ_CSR(0x304, mie)
-	READ_CSR(0x305, mtvec)
+	READ_CSR(0x305, mtvec.bits)
 
 	READ_CSR(0x340, mscratch)
 	READ_CSR(0x341, mepc)
@@ -120,7 +120,7 @@ xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct s
 	switch (inst.Zicsr.csr) {
 	WRITE_CSR(0x300, mstatus.bits)
 	WRITE_CSR(0x304, mie)
-	WRITE_CSR(0x305, mtvec)
+	WRITE_CSR(0x305, mtvec.bits)
 	WRITE_CSR(0x340, mscratch)
 	WRITE_CSR(0x341, mepc)
 	WRITE_CSR(0x342, mcause)
@@ -136,14 +136,14 @@ xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct s
 	return rval;
 }
 
-void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst)
+void proc_inst_wfi(struct rvcore_rv32ima *core, ast_t inst)
 {
 	assert(inst.priv_I.imm == 0x105);
 	core->mstatus.MIE = true;
 	core->wfi = true;
 }
 
-void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst)
+void proc_inst_mret(struct rvcore_rv32ima *core, ast_t inst)
 {
 	assert(inst.priv_I.imm == 0x302); // 0b0011 0000 0010
 	// refer Volume II: RISC-V Privileged Architectures V20211203 manual 8.6.4 Trap Return

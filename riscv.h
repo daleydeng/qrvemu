@@ -5,9 +5,8 @@
 #define XLEN 32
 typedef uint32_t xlenbits;
 
+typedef uint32_t bits32;
 typedef xlenbits regtype;
-
-typedef uint32_t inst_t;
 
 #define ALIGN 8
 
@@ -113,76 +112,77 @@ enum reg_name {
 	R_t6 = 31,
 };
 
-struct inst {
-	union {
-		struct {
-			xlenbits opcode:7;
-			xlenbits rd:5;
-			xlenbits funct3:3;
-		} v;
+typedef union {
+	bits32 bits;
 
-		struct {
-			xlenbits opcode:7;
-			xlenbits rd:5;
-			xlenbits funct3:3;
-			xlenbits rs1:5;
-			xlenbits imm:12;
-		} I;
-
-		struct {
-			xlenbits opcode:7;
-			xlenbits imm_11:1;
-			xlenbits imm_1_4:4;
-			xlenbits funct3:3;
-			xlenbits rs1:5;
-			xlenbits rs2:5;
-			xlenbits imm_5_10:6;
-			xlenbits imm_12:1;
-		} B;
-
-		struct {
-			xlenbits opcode:7;
-			xlenbits rd:5;
-			xlenbits imm:20;
-		} U;
-		struct {
-			xlenbits opcode:7;
-			xlenbits rd:5;
-			xlenbits imm_12_19:8;
-			xlenbits imm_11:1;
-			xlenbits imm_1_10:10;
-			xlenbits imm_20:1;
-		} J;
-		struct {
-			xlenbits opcode:7;
-			xlenbits rd:5;
-			xlenbits funct3:3;
-			xlenbits rs1:5;
-			xlenbits rs2:5;
-			xlenbits funct7:7;
-		} priv_R;
-		struct {
-			xlenbits opcode:7;
-			xlenbits rd:5;
-			xlenbits funct3:3;
-			xlenbits rs1:5;
-			xlenbits imm:12;
-		} priv_I;
-		struct {
-			xlenbits opcode:7;
-			xlenbits rd:5;
-			xlenbits funct3:3;
-			xlenbits rs1_uimm:5;
-			xlenbits csr:12;
-		} Zicsr;
+	struct {
+		bits32 opcode:7;
+		bits32 rd:5;
+		bits32 funct3:3;
 	};
-} __attribute__((packed));
+
+	struct {
+		bits32 opcode:7;
+		bits32 rd:5;
+		bits32 funct3:3;
+		bits32 rs1:5;
+		bits32 imm:12;
+	} I;
+
+	struct {
+		bits32 opcode:7;
+		bits32 imm_11:1;
+		bits32 imm_1_4:4;
+		bits32 funct3:3;
+		bits32 rs1:5;
+		bits32 rs2:5;
+		bits32 imm_5_10:6;
+		bits32 imm_12:1;
+	} B;
+
+	struct {
+		bits32 opcode:7;
+		bits32 rd:5;
+		xlenbits imm:20;
+	} U;
+	struct {
+		bits32 opcode:7;
+		bits32 rd:5;
+		bits32 imm_12_19:8;
+		bits32 imm_11:1;
+		bits32 imm_1_10:10;
+		bits32 imm_20:1;
+	} J;
+	struct {
+		bits32 opcode:7;
+		bits32 rd:5;
+		bits32 funct3:3;
+		bits32 rs1:5;
+		bits32 rs2:5;
+		bits32 funct7:7;
+	} priv_R;
+	struct {
+		bits32 opcode:7;
+		bits32 rd:5;
+		bits32 funct3:3;
+		bits32 rs1:5;
+		bits32 imm:12;
+	} priv_I;
+	struct {
+		bits32 opcode:7;
+		bits32 rd:5;
+		bits32 funct3:3;
+		bits32 rs1_uimm:5;
+		bits32 csr:12;
+	} Zicsr;
+} ast_t;
 
 static inline xlenbits sign_ext(xlenbits imm, int size) {
 	return get_bit(imm, size-1) ? imm | ((1 << (XLEN - size)) - 1) << size : imm;
 }
 
-typedef union{
+typedef union {
+	xlenbits bits;
 	struct {
 		xlenbits UIE:1; // 0
 		xlenbits SIE:1; // 1
@@ -205,11 +205,18 @@ typedef union{
 		xlenbits TVM:1;  //20
 		xlenbits TW:1;   //21
 		xlenbits TSR:1;  //22
-		xlenbits :XLEN - 1 - 23; //
+		xlenbits : XLEN - 1 - 23; //
 		xlenbits SD:1;   // XLEN - 1
-	} __attribute__((packed));
-	xlenbits bits;
+	};
 } mstatus_t;
+
+typedef union {
+	xlenbits bits;
+	struct {
+		xlenbits mode:2; // 0-1
+		xlenbits base:XLEN - 2; // 2-xlen-1
+	};
+} mtvec_t;
 
 struct rvcore_rv32ima {
 	regtype regs[32];
@@ -220,8 +227,8 @@ struct rvcore_rv32ima {
 	dword_t timer, timermatch;
 
 	mstatus_t mstatus;
-	regtype mscratch;
-	regtype mtvec;
+	xlenbits mscratch;
+	mtvec_t mtvec;
 	regtype mie;
 	regtype mip;
 
@@ -255,8 +262,8 @@ struct system {
 	xlenbits ram_size;
     uint8_t *image;
 
-    xlenbits (*read_csr)(struct system *sys, struct inst);
-    void (*write_csr)(struct system *sys, struct inst, xlenbits val);
+    xlenbits (*read_csr)(struct system *sys, ast_t inst);
+    void (*write_csr)(struct system *sys, ast_t inst, xlenbits val);
 };
 
 static inline xlenbits sys_ram_end(struct system *sys) {
@@ -279,7 +286,7 @@ static inline void handle_interrupt(struct rvcore_rv32ima *core, enum interrupt_
 }
 
 
-xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys);
-void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst);
-void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst);
+xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst, struct system *sys);
+void proc_inst_wfi(struct rvcore_rv32ima *core, ast_t inst);
+void proc_inst_mret(struct rvcore_rv32ima *core, ast_t inst);
 

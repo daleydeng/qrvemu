@@ -94,10 +94,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		}
 
 		ir = MINIRV32_LOAD4(ofs_pc);
-		struct inst inst = *((struct inst *)&ir);
-		int i_rd = inst.v.rd;
+		ast_t inst = {.bits = ir};
+		int i_rd = inst.rd;
 
-		switch (inst.v.opcode) {
+		switch (inst.opcode) {
 		case 0x37: // LUI (0b0110111)
 			write_rd(core, inst.U.rd, inst.U.imm << 12);
 			rd_writed = true;
@@ -391,11 +391,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 			break;
 		case 0x73: // Zifencei+Zicsr  (0b1110011)
 		{
-			if ((inst.v.funct3 & MASK(2))) // Zicsr function.
+			if ((inst.funct3 & MASK(2))) // Zicsr function.
 			{
 				rval = proc_inst_Zicsr(core, inst, sys);
 
-			} else if (inst.v.funct3 == 0x0) // "SYSTEM" 0b000
+			} else if (inst.funct3 == 0x0) // "SYSTEM" 0b000
 			{
 				int csrno = inst.priv_I.imm;
 				if (csrno == 0x105) //WFI (Wait for interrupts)

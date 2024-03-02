@@ -39,8 +39,8 @@ static int ReadKBByte();
 #include "riscv1.h"
 #include "utils.h"
 
-static xlenbits read_other_csr(struct system *sys, struct inst inst);
-static void write_other_csr(struct system *sys, struct inst inst, xlenbits val);
+static xlenbits read_other_csr(struct system *sys, ast_t inst);
+static void write_other_csr(struct system *sys, ast_t inst, xlenbits val);
 
 size_t RAM_BASE = 0x80000000;
 size_t RAM_SIZE = 64 * 1024 * 1024;
@@ -330,7 +330,7 @@ static uint32_t HandleControlLoad(uint32_t addy)
 	return 0;
 }
 
-static void write_other_csr(struct system *sys, struct inst inst, xlenbits val)
+static void write_other_csr(struct system *sys, ast_t inst, xlenbits val)
 {
 	xlenbits ptrstart, ptrend;
 
@@ -368,7 +368,7 @@ static void write_other_csr(struct system *sys, struct inst inst, xlenbits val)
 	}
 }
 
-static xlenbits read_other_csr(struct system *sys, struct inst inst)
+static xlenbits read_other_csr(struct system *sys, ast_t inst)
 {
 	if (inst.Zicsr.csr == 0x140) {
 		if (!IsKBHit())
