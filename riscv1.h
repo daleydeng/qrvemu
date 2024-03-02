@@ -87,23 +87,23 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 
 		case 0x6F: // JAL (0b1101111)
 		{
-			xlenbits rel_addr =
+			xlenbits imm = sign_ext(
 				(inst.J.imm_1_10 << 1 | inst.J.imm_11 << 11 |
-				 inst.J.imm_12_19 << 12 | inst.J.imm_20 << 20);
-			rel_addr = sign_ext(rel_addr, 21);
+				 inst.J.imm_12_19 << 12 | inst.J.imm_20 << 20),
+				21);
 
 			wX(core, inst.J.rd, pc + 4);
-			core->next_pc = pc + rel_addr;
+			core->next_pc = pc + imm;
 			break;
 		}
 
 		case 0x67: // JALR (0b1100111)
 		{
-			xlenbits imm_se = sign_ext(inst.I.imm, 12);
+			xlenbits imm = sign_ext(inst.I.imm, 12);
 			// NOTICE, rs1 may override with rd, save rs1 first
 			xlenbits rs1 = rX(core, inst.I.rs1);
 			wX(core, inst.I.rd, pc + 4);
-			core->next_pc = (rs1 + imm_se) & ~1;
+			core->next_pc = (rs1 + imm) & ~1;
 			break;
 		}
 
@@ -139,8 +139,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				jumped = (uint32_t)rs1 >= (uint32_t)rs2; // bgeu
 				break;
 			default:
-				handle_exception(core, E_Illegal_Instr,
-						 pc);
+				handle_exception(core, E_Illegal_Instr, pc);
 				return 0;
 			}
 
@@ -417,9 +416,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						}
 						break; // ECALL; 8 = "Environment call from U-mode"; 11 = "Environment call from M-mode"
 					case 1:
-						handle_exception(core,
-								 E_Breakpoint,
-								 pc);
+						handle_exception(
+							core, E_Breakpoint, pc);
 						return 0;
 					default:
 						handle_exception(
@@ -442,7 +440,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			uint32_t rs2 = REG((ir >> 20) & 0x1f);
 			uint32_t irmid = (ir >> 27) & 0x1f;
 			xlenbits rval = 0;
-			
+
 			rs1 -= plat->dram->base;
 
 			// We don't implement load/store from UART or CLNT with RV32A here.
