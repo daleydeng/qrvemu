@@ -49,9 +49,9 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 
 	core->mstatus.MPIE = core->mstatus.MIE;
 	core->mstatus.MIE = false;
-	core->mstatus.MPP = core->priv;
+	core->mstatus.MPP = core->cur_privilege;
 
-	core->priv = PRIV_MACHINE;
+	core->cur_privilege = Machine;
 }
 
 #define READ_CSR(no, name) \
@@ -153,7 +153,7 @@ void proc_inst_mret(struct rvcore_rv32ima *core, ast_t inst)
 	// MIE=MPIE, and MPIE=1. Lastly, MRET sets the privilege mode as previously determined, and
 	// sets pc = mepc.
 
-	core->priv = core->mstatus.MPP;;
+	core->cur_privilege = core->mstatus.MPP;;
 	// clear_bit2(&core->mstatus, MSTATUS_MPP); ??? dont work here
 	core->mstatus.MIE = core->mstatus.MPIE;
 	core->mstatus.MPIE = true;

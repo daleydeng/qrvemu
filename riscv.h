@@ -32,8 +32,6 @@ static inline void copy_bit2(xlenbits *reg, int b, int val)
 	copy_bit(reg, b + 1, val & 0x02);
 }
 
-enum trap_type { TRAP_NONE, INTERRUPT, EXCEPTION };
-
 typedef struct {
 	xlenbits low, high;
 } dword_t;
@@ -57,7 +55,7 @@ static inline bool dword_is_zero(dword_t a)
 	return a.low == 0 && a.high == 0;
 }
 
-enum priv { PRIV_USER = 0x00, PRIV_SUPERVISOR = 0x01, PRIV_MACHINE = 0x03 };
+enum Privilege {User = 0, Supervisor = 1, Machine = 3};
 
 enum reg_name {
 	R_zero = 0,
@@ -285,7 +283,7 @@ struct rvcore_rv32ima {
 
 	mcause_t mcause;
 
-	enum priv priv;
+	enum Privilege cur_privilege;
 	bool wfi;
 	xlenbits reservation;
 

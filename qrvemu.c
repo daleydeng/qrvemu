@@ -167,7 +167,7 @@ restart:
 	core->pc = RAM_BASE;
 	core->regs[R_a0] = 0x00; // hart ID
 	core->regs[R_a1] = RAM_BASE + RAM_SIZE - dtb_len;
-	core->priv = PRIV_MACHINE; // Machine-mode.
+	core->cur_privilege = Machine;
 
 	sys->core = core;
 

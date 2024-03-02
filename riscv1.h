@@ -413,8 +413,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 					i_rd = 0;
 					switch (csrno) {
 					case 0:
-						trap = (core->priv ==
-							PRIV_MACHINE) ?
+						trap = (core->cur_privilege ==
+							Machine) ?
 							       (11 + 1) :
 							       (8 + 1);
 						break; // ECALL; 8 = "Environment call from U-mode"; 11 = "Environment call from M-mode"
