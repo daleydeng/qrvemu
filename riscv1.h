@@ -498,9 +498,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				default:
 					handle_exception(core, E_Illegal_Instr, inst.bits);
 					return 0;
-
-					dowrite = 0;
-					break; //Not supported.
 				}
 				if (dowrite)
 					dram_sw(dram, rs1, rs2);
