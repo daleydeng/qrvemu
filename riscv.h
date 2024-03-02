@@ -1,6 +1,7 @@
 #include <stdint.h>
 #include <stdbool.h>
 #include <assert.h>
+#include <stddef.h>
 
 #define XLEN 32
 typedef uint32_t xlenbits;
@@ -319,6 +320,19 @@ static inline void write_rd(struct rvcore_rv32ima *core, int rd, xlenbits val)
 	}
 }
 
+struct dram {
+	xlenbits base;
+	size_t size;
+	uint8_t *image;
+};
+
+static inline xlenbits dram_end(struct dram *dram)
+{
+	return dram->base + dram->size;
+}
+
+void dram_alloc(struct dram *dram, xlenbits base, size_t size);
+
 struct system {
 	struct rvcore_rv32ima *core;
 
@@ -326,20 +340,13 @@ struct system {
 	xlenbits reservation;
 	bits64 mtimecmp;
 
-	xlenbits ram_base;
-	xlenbits ram_size;
-	uint8_t *image;
+	struct dram *dram;
 
 	xlenbits (*read_csr)(struct system *sys, ast_t inst);
 	void (*write_csr)(struct system *sys, ast_t inst, xlenbits val);
 };
 
-static inline xlenbits sys_ram_end(struct system *sys)
-{
-	return sys->ram_base + sys->ram_size;
-}
 
-void sys_alloc_memory(struct system *sys, xlenbits base, xlenbits size);
 void dump_sys(struct system *sys);
 
 static inline bool check_interrupt(const struct rvcore_rv32ima *core,

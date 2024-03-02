@@ -80,9 +80,9 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		rval = 0;
 		core->mcycle.v += 1;
 
-		xlenbits ofs_pc = core->pc - sys->ram_base;
+		xlenbits ofs_pc = core->pc - sys->dram->base;
 
-		if (ofs_pc >= sys->ram_size) {
+		if (ofs_pc >= sys->dram->size) {
 			handle_exception(core, E_Fetch_Access_Fault, core->pc);
 			return 0;
 		}
@@ -186,9 +186,9 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 			int32_t imm_se = imm | ((imm & 0x800) ? 0xfffff000 : 0);
 			uint32_t rsval = rs1 + imm_se;
 
-			rsval -= sys->ram_base;
-			if (rsval >= sys->ram_size - 3) {
-				rsval += sys->ram_base;
+			rsval -= sys->dram->base;
+			if (rsval >= sys->dram->size - 3) {
+				rsval += sys->dram->base;
 				if (rsval >= 0x10000000 &&
 				    rsval < 0x12000000) // UART, CLNT
 				{
@@ -236,11 +236,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 					((ir & 0xfe000000) >> 20);
 			if (addy & 0x800)
 				addy |= 0xfffff000;
-			addy += rs1 - sys->ram_base;
+			addy += rs1 - sys->dram->base;
 			i_rd = 0;
 
-			if (addy >= sys->ram_size - 3) {
-				addy += sys->ram_base;
+			if (addy >= sys->dram->size - 3) {
+				addy += sys->dram->base;
 				if (addy >= 0x10000000 && addy < 0x12000000) {
 					// Should be stuff like SYSCON, 8250, CLNT
 					if (addy == 0x11004004) //CLNT
@@ -436,13 +436,13 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 			uint32_t rs2 = REG((ir >> 20) & 0x1f);
 			uint32_t irmid = (ir >> 27) & 0x1f;
 
-			rs1 -= sys->ram_base;
+			rs1 -= sys->dram->base;
 
 			// We don't implement load/store from UART or CLNT with RV32A here.
 
-			if (rs1 >= sys->ram_size - 3) {
+			if (rs1 >= sys->dram->size - 3) {
 				trap = (7 + 1); //Store/AMO access fault
-				rval = rs1 + sys->ram_base;
+				rval = rs1 + sys->dram->base;
 			} else {
 				rval = MINIRV32_LOAD4(rs1);
 

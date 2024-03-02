@@ -147,27 +147,29 @@ int main(int argc, char **argv)
 	long dtb_len = get_file_size(dtb_fp);
 
 	RAM_SIZE += dtb_len;
+	struct dram *dram = calloc(1, sizeof(struct dram));
+	dram_alloc(dram, RAM_BASE, RAM_SIZE);
 
 	sys = calloc(1, sizeof(struct system));
 	assert(sys);
-	sys_alloc_memory(sys, RAM_BASE, RAM_SIZE);
+	sys->dram = dram;
 	sys->read_csr = read_other_csr;
 	sys->write_csr = write_other_csr;
 
 	long flen = 0;
 
 restart:
-	if ((flen = load_file(kernel_fp, sys->image, sys->ram_size, false)) < 0)
+	if ((flen = load_file(kernel_fp, dram->image, dram->size, false)) < 0)
 		return flen;
 	fclose(kernel_fp);
 
 
-	if ((dtb_len = load_file(dtb_fp, sys->image, sys->ram_size, true)) < 0)
+	if ((dtb_len = load_file(dtb_fp, dram->image, dram->size, true)) < 0)
 	    return dtb_len;
 	fclose(dtb_fp);
 
 	if( kernel_command_line )
-		strncpy( (char*)(sys_ram_end(sys) - dtb_len + 0xc0 ), kernel_command_line, 54 );
+		strncpy( (char*)(dram_end(dram) - dtb_len + 0xc0 ), kernel_command_line, 54 );
 
 	CaptureKeyboardInput();
 
@@ -198,7 +200,7 @@ restart:
 
 		int ret = MiniRV32IMAStep(
 			sys,
-			core, sys->image, 0, elapsedUs,
+			core, dram->image, 0, elapsedUs,
 			instrs_per_flip); // Execute upto 1024 cycles before breaking out.
 		switch (ret) {
 		case 0:
@@ -339,7 +341,8 @@ static uint32_t HandleControlLoad(uint32_t addy)
 static void write_other_csr(struct system *sys, ast_t inst, xlenbits val)
 {
 	xlenbits ptrstart, ptrend;
-
+	struct dram *dram = sys->dram;
+	
 	switch (inst.Zicsr.csr) {
 	case 0x136:
 		printf("%d", val);
@@ -353,18 +356,18 @@ static void write_other_csr(struct system *sys, ast_t inst, xlenbits val)
 
 	case 0x138:
 		// Print "string"
-		ptrstart = val - sys->ram_base;
+		ptrstart = val - dram->base;
 		ptrend = ptrstart;
-		if (ptrstart >= sys->ram_size)
+		if (ptrstart >= dram->size)
 			printf("DEBUG PASSED INVALID PTR (%08x)\n", val);
-		while (ptrend < sys->ram_size) {
-			if (sys->image[ptrend] == 0)
+		while (ptrend < dram->size) {
+			if (dram->image[ptrend] == 0)
 				break;
 			ptrend++;
 		}
 
 		if (ptrend != ptrstart)
-			fwrite(sys->image + ptrstart, ptrend - ptrstart, 1, stdout);
+			fwrite(dram->image + ptrstart, ptrend - ptrstart, 1, stdout);
 		break;
 
 	case 0x139:

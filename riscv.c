@@ -3,12 +3,12 @@
 #include <assert.h>
 #include "riscv.h"
 
-void sys_alloc_memory(struct system *sys, xlenbits base, xlenbits size)
+void dram_alloc(struct dram *dram, xlenbits base, size_t size)
 {
-    sys->ram_base = base;
-    sys->ram_size = size;
-    sys->image = calloc(size, 1);
-    if (!sys->image) {
+    dram->base = base;
+    dram->size = size;
+    dram->image = calloc(size, 1);
+    if (!dram->image) {
 		fprintf(stderr, "Error: could not allocate system image.\n");
 		exit(-4);
 	}
@@ -18,12 +18,12 @@ void sys_alloc_memory(struct system *sys, xlenbits base, xlenbits size)
 void dump_sys(struct system *sys)
 {
 	uint32_t pc = sys->core->pc;
-	uint32_t pc_offset = pc - sys->ram_base;
+	uint32_t pc_offset = pc - sys->dram->base;
 	uint32_t ir = 0;
 
 	printf("PC: %08x ", pc);
-	if (pc_offset >= 0 && pc_offset < sys->ram_size - 3) {
-		ir = *((uint32_t *)(&((uint8_t *)sys->image)[pc_offset]));
+	if (pc_offset >= 0 && pc_offset < sys->dram->size - 3) {
+		ir = *((uint32_t *)(&((uint8_t *)sys->dram->image)[pc_offset]));
 		printf("[0x%08x] ", ir);
 	} else
 		printf("[xxxxxxxxxx] ");
