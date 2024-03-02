@@ -60,7 +60,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 	uint32_t rval = 0;
 
 	for (int icount = 0; icount < count; icount++) {
-		bool rd_writed = false;
 		xlenbits ir = 0;
 		rval = 0;
 		core->mcycle.v += 1;
@@ -79,21 +78,16 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 
 		ir = dram_lw(dram, ofs_pc);
 		ast_t inst = { .bits = ir };
-		int i_rd = inst.rd;
 		core->next_pc = core->pc + 4;
 
 		switch (inst.opcode) {
 		case 0x37: // LUI (0b0110111)
 			wX(core, inst.U.rd, inst.U.imm << 12);
-
-			rd_writed = true;
 			break;
 
 		case 0x17: // AUIPC (0b0010111)
 			wX(core, inst.U.rd,
 				 core->pc + (inst.U.imm << 12));
-
-			rd_writed = true;
 			break;
 
 		case 0x6F: // JAL (0b1101111)
@@ -105,8 +99,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 
 			wX(core, inst.J.rd, core->pc + 4);
 			core->next_pc = core->pc + rel_addr;
-
-			rd_writed = true;
 			break;
 		}
 
@@ -117,8 +109,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			xlenbits rs1 = rX(core, inst.I.rs1);
 			wX(core, inst.I.rd, core->pc + 4);
 			core->next_pc = (rs1 + imm_se) & ~1;
-
-			rd_writed = true;
 			break;
 		}
 
@@ -163,7 +153,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			if (jumped)
 				core->next_pc = core->pc + imm;
 
-			rd_writed = true;
 			break;
 		}
 		case 0x03: // Load (0b0000011)
@@ -214,12 +203,12 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					return 0;
 				}
 			}
+
+			wX(core, inst.I.rd, rval);
 			break;
 		}
 		case 0x23: // Store 0b0100011
 		{
-
-
 			uint32_t rs1 = REG((ir >> 15) & 0x1f);
 			uint32_t rs2 = REG((ir >> 20) & 0x1f);
 			uint32_t addy = ((ir >> 7) & 0x1f) |
@@ -227,7 +216,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			if (addy & 0x800)
 				addy |= 0xfffff000;
 			addy += rs1 - plat->dram->base;
-			i_rd = 0;
 
 			if (addy >= plat->dram->size - 3) {
 				addy += plat->dram->base;
@@ -244,6 +232,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					{
 						tick_pc(core);
 						return rs2; // NOTE: PC will be PC of Syscon.
+
 					} else
 						MINIRV32_HANDLE_MEM_STORE_CONTROL(
 							addy, rs2);
@@ -268,8 +257,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					return 0;
 				}
 			}
-
-			rd_writed = true;
 			break;
 		}
 		case 0x13: // Op-immediate 0b0010011
@@ -343,6 +330,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						rval = rs1 % rs2;
 					break; // REMU
 				}
+				
 			} else {
 				switch ((ir >> 12) &
 					7) // These could be either op-immediate or op commands.  Be careful.
@@ -378,11 +366,10 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					break;
 				}
 			}
-
+			wX(core, inst.R.rd, rval);
 			break;
 		}
-		case 0x0f: // 0b0001111
-			i_rd = 0; // fencetype = (ir >> 12) & 0b111; We ignore fences in this impl.
+		case 0x0f: // 0b0001111 fence
 			break;
 		case 0x73: // Zifencei+Zicsr  (0b1110011)
 		{
@@ -390,8 +377,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			{
 				if ((err = execute_Zicsr(inst, core, plat)))
 					return err;
-
-				rd_writed = true;
 
 			} else if (inst.funct3 == 0x0) // "SYSTEM" 0b000
 			{
@@ -410,7 +395,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						return err;
 
 				} else {
-					i_rd = 0;
 					switch (csrno) {
 					case 0:
 						if (core->cur_privilege == Machine) {
@@ -447,24 +431,21 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			// We don't implement load/store from UART or CLNT with RV32A here.
 
 			if (rs1 >= plat->dram->size - 3) {
-				rval = rs1 + plat->dram->base;
-				
-				handle_exception(core, E_SAMO_Access_Fault, rval);
+				handle_exception(core, E_SAMO_Access_Fault, rs1 + plat->dram->base);
 				return 0;
 			} else {
 				rval = dram_lw(dram, rs1);
 
 				// Referenced a little bit of https://github.com/franzflasch/riscv_em/blob/master/src/core/core.c
-				uint32_t dowrite = 1;
+				uint32_t write_mem = 1;
 				switch (irmid) {
 				case 2: //LR.W (0b00010)
-					dowrite = 0;
+					write_mem = 0;
 					plat->reservation = rs1;
 					break;
 				case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
 					rval = plat->reservation != rs1;
-					dowrite =
-						!rval; // Only write if slot is valid.
+					write_mem = !rval; // Only write if slot is valid.
 					break;
 				case 1:
 					break; //AMOSWAP.W (0b00001)
@@ -500,8 +481,10 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					handle_exception(core, E_Illegal_Instr, inst.bits);
 					return 0;
 				}
-				if (dowrite)
+				if (write_mem)
 					dram_sw(dram, rs1, rs2);
+
+				wX(core, inst.R.rd, rval);
 			}
 			break;
 		}
@@ -509,9 +492,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			handle_exception(core, E_Illegal_Instr, inst.bits);
 			return 0;
 		}
-
-		if (!rd_writed)
-			wX(core, i_rd, rval);
 
 		tick_pc(core);
 	}

@@ -89,6 +89,15 @@ typedef union {
 	};
 
 	struct {
+		bits32 opcode: 7;
+		bits32 rd: 5;
+		bits32 funct3: 3;
+		bits32 rs1: 5;
+		bits32 rs2: 5;
+		bits32 funct7:12;
+	} R;
+
+	struct {
 		bits32 opcode : 7;
 		bits32 rd : 5;
 		bits32 funct3 : 3;
