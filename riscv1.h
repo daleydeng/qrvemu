@@ -386,7 +386,7 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		{
 			if ((inst.funct3 & MASK(2))) // Zicsr function.
 			{
-				proc_inst_Zicsr(inst, core, plat);
+				execute_Zicsr(inst, core, plat);
 
 				rd_writed = true;
 
@@ -395,13 +395,13 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				int csrno = inst.priv_I.imm;
 				if (csrno == 0x105) //WFI (Wait for interrupts)
 				{
-					proc_inst_wfi(inst, core, plat);
+					execute_wfi(inst, core, plat);
 					core->pc = core->pc + 4;
 					return 1;
 
 				} else if (((csrno & 0xff) == 0x02)) // MRET
 				{
-					proc_inst_mret(inst, core, plat);
+					execute_mret(inst, core, plat);
 					core->pc = core->mepc - 4;
 
 				} else {
