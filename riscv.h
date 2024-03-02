@@ -297,6 +297,7 @@ struct rvcore_rv32ima {
 	regtype regs[32];
 
 	xlenbits pc;
+	xlenbits next_pc;
 
 	mstatus_t mstatus;
 	mtvec_t mtvec;
@@ -320,6 +321,11 @@ struct rvcore_rv32ima {
 	misa_t misa;
 
 } __attribute__((aligned(ALIGN)));
+
+static inline void tick_pc(struct rvcore_rv32ima *core)
+{
+	core->pc = core->next_pc;
+}
 
 static inline void wX(struct rvcore_rv32ima *core, int rd, regtype val)
 {

@@ -45,13 +45,15 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 	core->mcause = mcause;
 	core->mtval = mtval;
 	core->mepc = core->pc;
-	core->pc = core->mtvec.bits;
+	core->next_pc = core->mtvec.bits;
 
 	core->mstatus.MPIE = core->mstatus.MIE;
 	core->mstatus.MIE = false;
 	core->mstatus.MPP = core->cur_privilege;
 
 	core->cur_privilege = Machine;
+
+	tick_pc(core);
 }
 
 #define READ_CSR(no, name) \
