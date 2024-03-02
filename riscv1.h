@@ -7,10 +7,6 @@
 
 #include <stdint.h>
 
-#ifndef MINIRV32_POSTEXEC
-#define MINIRV32_POSTEXEC(...) ;
-#endif
-
 #ifndef MINIRV32_HANDLE_MEM_STORE_CONTROL
 #define MINIRV32_HANDLE_MEM_STORE_CONTROL(...) ;
 #endif
@@ -61,7 +57,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		return 0;
 	}
 
-	uint32_t trap = 0;
 	uint32_t rval = 0;
 
 	for (int icount = 0; icount < count; icount++) {
@@ -160,8 +155,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					  (uint32_t)rs2; // bgeu
 				break;
 			default:
-				trap = (2 + 1);
-				handle_exception(core, E_Fetch_Addr_Align,
+				handle_exception(core, E_Illegal_Instr,
 						 core->pc);
 				return 0;
 			}
@@ -194,8 +188,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						MINIRV32_HANDLE_MEM_LOAD_CONTROL(
 							rsval, rval);
 				} else {
-					trap = (5 + 1);
-					rval = rsval;
+					handle_exception(core, E_Load_Access_Fault, rsval);
+					return 0;
 				}
 			} else {
 				switch ((ir >> 12) & 0x7) {
@@ -216,7 +210,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					rval = dram_lhu(dram, rsval);
 					break;
 				default:
-					trap = (2 + 1);
+					handle_exception(core, E_Illegal_Instr, inst.bits);
+					return 0;
 				}
 			}
 			break;
@@ -253,8 +248,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						MINIRV32_HANDLE_MEM_STORE_CONTROL(
 							addy, rs2);
 				} else {
-					trap = (7 + 1); // Store access fault.
-					rval = addy;
+					handle_exception(core, E_SAMO_Access_Fault, addy);
+					return 0;
 				}
 			} else {
 				switch ((ir >> 12) & 0x7) {
@@ -269,7 +264,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					dram_sw(dram, addy, rs2);
 					break;
 				default:
-					trap = (2 + 1);
+					handle_exception(core, E_Illegal_Instr, inst.bits);
+					return 0;
 				}
 			}
 			break;
@@ -407,29 +403,36 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 
 				} else if (((csrno & 0xff) == 0x02)) // MRET
 				{
-					execute_mret(inst, core, plat);
+					if ((err = execute_mret(inst, core, plat)))
+						return err;
+
 					core->pc = core->mepc - 4;
 
 				} else {
 					i_rd = 0;
 					switch (csrno) {
 					case 0:
-						trap = (core->cur_privilege ==
-							Machine) ?
-							       (11 + 1) :
-							       (8 + 1);
+						if (core->cur_privilege == Machine) {
+							handle_exception(core, E_M_EnvCall, core->pc);
+							return 0;
+						} else {
+							handle_exception(core, E_U_EnvCall, core->pc);
+							return 0;			
+						}
 						break; // ECALL; 8 = "Environment call from U-mode"; 11 = "Environment call from M-mode"
 					case 1:
-						trap = (3 + 1);
-						break; // EBREAK 3 = "Breakpoint"
+						handle_exception(core, E_Breakpoint, core->pc);
+						return 0;
 					default:
-						trap = (2 + 1);
-						break; // Illegal opcode.
+						handle_exception(core, E_Illegal_Instr, inst.bits);
+						return 0;
 					}
 				}
-			} else
-				trap = (2 +
-					1); // Note micrrop 0b100 == undefined.
+			} else {
+				handle_exception(core, E_Illegal_Instr, inst.bits);
+				return 0;
+			}
+				
 			break;
 		}
 		case 0x2f: // RV32A (0b00101111)
@@ -443,8 +446,10 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			// We don't implement load/store from UART or CLNT with RV32A here.
 
 			if (rs1 >= plat->dram->size - 3) {
-				trap = (7 + 1); //Store/AMO access fault
 				rval = rs1 + plat->dram->base;
+				
+				handle_exception(core, E_SAMO_Access_Fault, rval);
+				return 0;
 			} else {
 				rval = dram_lw(dram, rs1);
 
@@ -491,7 +496,9 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					rs2 = (rs2 > rval) ? rs2 : rval;
 					break; //AMOMAXU.W (0b11100)
 				default:
-					trap = (2 + 1);
+					handle_exception(core, E_Illegal_Instr, inst.bits);
+					return 0;
+
 					dowrite = 0;
 					break; //Not supported.
 				}
@@ -501,26 +508,16 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			break;
 		}
 		default:
-			trap = (2 + 1); // Fault: Invalid opcode.
+			handle_exception(core, E_Illegal_Instr, inst.bits);
+			return 0;
 		}
-
-		// If there was a trap, do NOT allow register writeback.
-		if (trap)
-			break;
 
 		if (!rd_writed)
 			wX(core, i_rd, rval);
 
-		MINIRV32_POSTEXEC(core->pc, ir, trap);
-
 		if (!is_jump)
 			core->pc += 4;
 	}
-
-	// Handle traps and interrupts.
-	if (trap)
-		handle_exception(core, trap - 1,
-				 (trap > 5 && trap <= 8) ? rval : core->pc);
 
 	return 0;
 }

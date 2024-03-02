@@ -10,26 +10,13 @@ static int64_t SimpleReadNumberInt(const char *number, int64_t defaultNumber);
 static uint64_t GetTimeMicroseconds();
 static void ResetKeyboardInput();
 static void CaptureKeyboardInput();
-static uint32_t HandleException(uint32_t ir, uint32_t retval);
 static uint32_t HandleControlStore(uint32_t addy, uint32_t val);
 static uint32_t HandleControlLoad(uint32_t addy);
 static void MiniSleep();
 static int IsKBHit();
 static int ReadKBByte();
 
-// This is the functionality we want to override in the emulator.
-//  think of this as the way the emulator's processor is connected to the
-//  outside world.
-#define MINIRV32_POSTEXEC(pc, ir, retval)                             \
-	{                                                             \
-		if (retval > 0) {                                     \
-			if (fail_on_all_faults) {                     \
-				printf("FAULT\n");                    \
-				return 3;                             \
-			} else                                        \
-				retval = HandleException(ir, retval); \
-		}                                                     \
-	}
+
 #define MINIRV32_HANDLE_MEM_STORE_CONTROL(addy, val) \
 	if (HandleControlStore(addy, val))           \
 		return val;
@@ -308,15 +295,6 @@ static int IsKBHit()
 //////////////////////////////////////////////////////////////////////////
 // Rest of functions functionality
 //////////////////////////////////////////////////////////////////////////
-
-static uint32_t HandleException(uint32_t ir, uint32_t code)
-{
-	// Weird opcode emitted by duktape on exit.
-	if (code == 3) {
-		// Could handle other opcodes here.
-	}
-	return code;
-}
 
 static uint32_t HandleControlStore(uint32_t addy, uint32_t val)
 {
