@@ -57,13 +57,13 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 	// Handle Timer interrupt.
 	if (!dword_is_zero(core->timermatch) &&
 	    dword_cmp(core->timer, core->timermatch)) {
-		core->wfi = false;
+		sys->wfi = false;
 		core->mip.MTI = true;
 	} else if (core->mip.MTI) {
 		core->mip.MTI = false;
 	}
 
-	if (core->wfi)
+	if (sys->wfi)
 		return 1;
 
 	if (check_interrupt(core, I_M_Timer)) {
@@ -393,20 +393,20 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		{
 			if ((inst.funct3 & MASK(2))) // Zicsr function.
 			{
-				rval = proc_inst_Zicsr(core, inst, sys);
+				rval = proc_inst_Zicsr(inst, core, sys);
 
 			} else if (inst.funct3 == 0x0) // "SYSTEM" 0b000
 			{
 				int csrno = inst.priv_I.imm;
 				if (csrno == 0x105) //WFI (Wait for interrupts)
 				{
-					proc_inst_wfi(core, inst);
+					proc_inst_wfi(inst, core, sys);
 					core->pc = core->pc + 4;
 					return 1;
 
 				} else if (((csrno & 0xff) == 0x02)) // MRET
 				{
-					proc_inst_mret(core, inst);
+					proc_inst_mret(inst, core);
 					core->pc = core->mepc - 4;
 
 				} else {
@@ -452,10 +452,10 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				switch (irmid) {
 				case 2: //LR.W (0b00010)
 					dowrite = 0;
-					core->reservation = rs1;
+					sys->reservation = rs1;
 					break;
 				case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
-					rval = core->reservation != rs1;
+					rval = sys->reservation != rs1;
 					dowrite =
 						!rval; // Only write if slot is valid.
 					break;

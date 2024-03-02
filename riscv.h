@@ -284,9 +284,7 @@ struct rvcore_rv32ima {
 	mcause_t mcause;
 
 	enum Privilege cur_privilege;
-	bool wfi;
-	xlenbits reservation;
-
+	
 	// not used by os, information only
 	regtype mvendorid;
 	regtype misa;
@@ -303,6 +301,9 @@ static inline void write_rd(struct rvcore_rv32ima *core, int rd, xlenbits val)
 
 struct system {
 	struct rvcore_rv32ima *core;
+
+	bool wfi;
+	xlenbits reservation;
 
 	xlenbits ram_base;
 	xlenbits ram_size;
@@ -341,7 +342,6 @@ static inline void handle_exception(struct rvcore_rv32ima *core,
 	handle_trap(core, mcause, mtval);
 }
 
-xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst,
-			 struct system *sys);
-void proc_inst_wfi(struct rvcore_rv32ima *core, ast_t inst);
-void proc_inst_mret(struct rvcore_rv32ima *core, ast_t inst);
+xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct system *sys);
+void proc_inst_wfi(ast_t inst, struct rvcore_rv32ima *core, struct system *sys);
+void proc_inst_mret(ast_t inst, struct rvcore_rv32ima *core);
