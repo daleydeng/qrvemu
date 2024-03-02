@@ -14,8 +14,8 @@ typedef xlenbits regtype;
 #define get_bit(reg, b) ((reg) & 1 << (b))
 #define get_bit2(reg, b) (((reg) >> b) & 0x3)
 #define set_bit(reg, b) ((*(reg)) |= 1 << (b))
-#define clear_bit(reg, b) ((*(reg)) &=~ (1 << (b)))
-#define clear_bit2(reg, b) ((*(reg)) &=~ (0x3 << (b)))
+#define clear_bit(reg, b) ((*(reg)) &= ~(1 << (b)))
+#define clear_bit2(reg, b) ((*(reg)) &= ~(0x3 << (b)))
 
 static inline void copy_bit(xlenbits *reg, int b, bool val)
 {
@@ -33,8 +33,6 @@ static inline void copy_bit2(xlenbits *reg, int b, int val)
 }
 
 enum trap_type { TRAP_NONE, INTERRUPT, EXCEPTION };
-
-enum interrupt_type { INTR_MACHINE_TIMER = 7 };
 
 enum exception_type {
 	EXC_NONE = -1,
@@ -116,121 +114,182 @@ typedef union {
 	bits32 bits;
 
 	struct {
-		bits32 opcode:7;
-		bits32 rd:5;
-		bits32 funct3:3;
+		bits32 opcode : 7;
+		bits32 rd : 5;
+		bits32 funct3 : 3;
 	};
 
 	struct {
-		bits32 opcode:7;
-		bits32 rd:5;
-		bits32 funct3:3;
-		bits32 rs1:5;
-		bits32 imm:12;
+		bits32 opcode : 7;
+		bits32 rd : 5;
+		bits32 funct3 : 3;
+		bits32 rs1 : 5;
+		bits32 imm : 12;
 	} I;
 
 	struct {
-		bits32 opcode:7;
-		bits32 imm_11:1;
-		bits32 imm_1_4:4;
-		bits32 funct3:3;
-		bits32 rs1:5;
-		bits32 rs2:5;
-		bits32 imm_5_10:6;
-		bits32 imm_12:1;
+		bits32 opcode : 7;
+		bits32 imm_11 : 1;
+		bits32 imm_1_4 : 4;
+		bits32 funct3 : 3;
+		bits32 rs1 : 5;
+		bits32 rs2 : 5;
+		bits32 imm_5_10 : 6;
+		bits32 imm_12 : 1;
 	} B;
 
 	struct {
-		bits32 opcode:7;
-		bits32 rd:5;
-		xlenbits imm:20;
+		bits32 opcode : 7;
+		bits32 rd : 5;
+		xlenbits imm : 20;
 	} U;
 	struct {
-		bits32 opcode:7;
-		bits32 rd:5;
-		bits32 imm_12_19:8;
-		bits32 imm_11:1;
-		bits32 imm_1_10:10;
-		bits32 imm_20:1;
+		bits32 opcode : 7;
+		bits32 rd : 5;
+		bits32 imm_12_19 : 8;
+		bits32 imm_11 : 1;
+		bits32 imm_1_10 : 10;
+		bits32 imm_20 : 1;
 	} J;
 	struct {
-		bits32 opcode:7;
-		bits32 rd:5;
-		bits32 funct3:3;
-		bits32 rs1:5;
-		bits32 rs2:5;
-		bits32 funct7:7;
+		bits32 opcode : 7;
+		bits32 rd : 5;
+		bits32 funct3 : 3;
+		bits32 rs1 : 5;
+		bits32 rs2 : 5;
+		bits32 funct7 : 7;
 	} priv_R;
 	struct {
-		bits32 opcode:7;
-		bits32 rd:5;
-		bits32 funct3:3;
-		bits32 rs1:5;
-		bits32 imm:12;
+		bits32 opcode : 7;
+		bits32 rd : 5;
+		bits32 funct3 : 3;
+		bits32 rs1 : 5;
+		bits32 imm : 12;
 	} priv_I;
 	struct {
-		bits32 opcode:7;
-		bits32 rd:5;
-		bits32 funct3:3;
-		bits32 rs1_uimm:5;
-		bits32 csr:12;
+		bits32 opcode : 7;
+		bits32 rd : 5;
+		bits32 funct3 : 3;
+		bits32 rs1_uimm : 5;
+		bits32 csr : 12;
 	} Zicsr;
 } ast_t;
 
-static inline xlenbits sign_ext(xlenbits imm, int size) {
-	return get_bit(imm, size-1) ? imm | ((1 << (XLEN - size)) - 1) << size : imm;
+static inline xlenbits sign_ext(xlenbits imm, int size)
+{
+	return get_bit(imm, size - 1) ?
+		       imm | ((1 << (XLEN - size)) - 1) << size :
+		       imm;
 }
 
 typedef union {
 	xlenbits bits;
 	struct {
-		xlenbits UIE:1; // 0
-		xlenbits SIE:1; // 1
-		xlenbits :1;    // 2
-		xlenbits MIE:1; // 3
+		xlenbits UIE : 1; // 0
+		xlenbits SIE : 1; // 1
+		xlenbits : 1; // 2
+		xlenbits MIE : 1; // 3
 
-		xlenbits UPIE:1; //4
-		xlenbits SPIE:1; //5
-		xlenbits :1;     // 6
-		xlenbits MPIE:1; //7
+		xlenbits UPIE : 1; //4
+		xlenbits SPIE : 1; //5
+		xlenbits : 1; // 6
+		xlenbits MPIE : 1; //7
 
-		xlenbits SPP:1;  //8
-		xlenbits VS:2;   //9-10
-		xlenbits MPP:2;  //11-12
-		xlenbits FS:2;   //13-14
-		xlenbits XS:2;   //15-16
-		xlenbits MPRV:1; //17
-		xlenbits SUM:1;  //18
-		xlenbits MXR:1;  //19
-		xlenbits TVM:1;  //20
-		xlenbits TW:1;   //21
-		xlenbits TSR:1;  //22
+		xlenbits SPP : 1; //8
+		xlenbits VS : 2; //9-10
+		xlenbits MPP : 2; //11-12
+		xlenbits FS : 2; //13-14
+		xlenbits XS : 2; //15-16
+		xlenbits MPRV : 1; //17
+		xlenbits SUM : 1; //18
+		xlenbits MXR : 1; //19
+		xlenbits TVM : 1; //20
+		xlenbits TW : 1; //21
+		xlenbits TSR : 1; //22
 		xlenbits : XLEN - 1 - 23; //
-		xlenbits SD:1;   // XLEN - 1
+		xlenbits SD : 1; // XLEN - 1
 	};
 } mstatus_t;
 
 typedef union {
 	xlenbits bits;
 	struct {
-		xlenbits mode:2; // 0-1
-		xlenbits base:XLEN - 2; // 2-xlen-1
+		xlenbits mode : 2; // 0-1
+		xlenbits base : XLEN - 2; // 2-xlen-1
 	};
 } mtvec_t;
+
+enum InterruptType {
+	I_U_Software = 0,
+	I_S_Software,
+	I_M_Software,
+	I_U_Timer,
+	I_S_Timer,
+	I_M_Timer,
+	I_U_External,
+	I_S_External,
+	I_M_External
+};
+
+static inline int interruptType_to_bits(enum InterruptType i)
+{
+	switch (i) {
+	case I_U_Software:
+		return 0;
+	case I_S_Software:
+		return 0x01;
+	case I_M_Software:
+		return 0x03;
+	case I_U_Timer:
+		return 0x04;
+	case I_S_Timer:
+		return 0x05;
+	case I_M_Timer:
+		return 0x07;
+	case I_U_External:
+		return 0x08;
+	case I_S_External:
+		return 0x09;
+	case I_M_External:
+		return 0x0b;
+	default:
+		assert(0);
+	}
+}
+
+typedef union {
+	xlenbits bits;
+	struct {
+		xlenbits USI : 1; //0
+		xlenbits SSI : 1; //1
+		xlenbits : 1; //2
+		xlenbits MSI : 1; //3
+
+		xlenbits UTI : 1; //4
+		xlenbits STI : 1; //5
+		xlenbits : 1; //6
+		xlenbits MTI : 1; //7
+
+		xlenbits UEI : 1; //8
+		xlenbits SEI : 1; //9
+		xlenbits : 1; //10
+		xlenbits MEI : 1; //11
+	};
+} interrupts_t;
 
 struct rvcore_rv32ima {
 	regtype regs[32];
 
 	xlenbits pc;
-	
+
 	dword_t cycle;
 	dword_t timer, timermatch;
 
 	mstatus_t mstatus;
 	xlenbits mscratch;
 	mtvec_t mtvec;
-	regtype mie;
-	regtype mip;
+	interrupts_t mie;
+	interrupts_t mip;
 
 	regtype mepc;
 	regtype mtval;
@@ -243,7 +302,7 @@ struct rvcore_rv32ima {
 	// not used by os, information only
 	regtype mvendorid;
 	regtype misa;
-	
+
 } __attribute__((aligned(ALIGN)));
 
 static inline void write_rd(struct rvcore_rv32ima *core, int rd, xlenbits val)
@@ -252,41 +311,42 @@ static inline void write_rd(struct rvcore_rv32ima *core, int rd, xlenbits val)
 		assert(rd < XLEN);
 		core->regs[rd] = val;
 	}
-		
 }
 
 struct system {
-    struct rvcore_rv32ima *core;
+	struct rvcore_rv32ima *core;
 
 	xlenbits ram_base;
 	xlenbits ram_size;
-    uint8_t *image;
+	uint8_t *image;
 
-    xlenbits (*read_csr)(struct system *sys, ast_t inst);
-    void (*write_csr)(struct system *sys, ast_t inst, xlenbits val);
+	xlenbits (*read_csr)(struct system *sys, ast_t inst);
+	void (*write_csr)(struct system *sys, ast_t inst, xlenbits val);
 };
 
-static inline xlenbits sys_ram_end(struct system *sys) {
+static inline xlenbits sys_ram_end(struct system *sys)
+{
 	return sys->ram_base + sys->ram_size;
 }
 
 void sys_alloc_memory(struct system *sys, xlenbits base, xlenbits size);
 void dump_sys(struct system *sys);
 
-static inline bool check_interrupt(const struct rvcore_rv32ima *core, enum interrupt_type bit)
+static inline bool check_interrupt(const struct rvcore_rv32ima *core, enum InterruptType intr)
 {
-	return core->mstatus.MIE &&
-	       get_bit(core->mip, bit) && get_bit(core->mie, bit);
+	int bit = interruptType_to_bits(intr);
+	return core->mstatus.MIE && get_bit(core->mip.bits, bit) &&
+	       get_bit(core->mie.bits, bit);
 }
 
 void handle_trap(struct rvcore_rv32ima *core, xlenbits mcause, xlenbits mtval);
-static inline void handle_interrupt(struct rvcore_rv32ima *core, enum interrupt_type bit)
+static inline void handle_interrupt(struct rvcore_rv32ima *core,
+				    enum InterruptType intr)
 {
-	handle_trap(core, 1 << (XLEN - 1) | bit, 0);
+	handle_trap(core, 1 << (XLEN - 1) | interruptType_to_bits(intr), 0);
 }
 
-
-xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst, struct system *sys);
+xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst,
+			 struct system *sys);
 void proc_inst_wfi(struct rvcore_rv32ima *core, ast_t inst);
 void proc_inst_mret(struct rvcore_rv32ima *core, ast_t inst);
-

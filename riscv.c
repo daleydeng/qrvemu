@@ -76,14 +76,14 @@ xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst, struct system 
 	READ_CSR(0xf11, mvendorid)
 	READ_CSR(0x300, mstatus.bits)
 	READ_CSR(0x301, misa)
-	READ_CSR(0x304, mie)
+	READ_CSR(0x304, mie.bits)
 	READ_CSR(0x305, mtvec.bits)
 
 	READ_CSR(0x340, mscratch)
 	READ_CSR(0x341, mepc)
 	READ_CSR(0x342, mcause)
 	READ_CSR(0x343, mtval)
-	READ_CSR(0x344, mip)
+	READ_CSR(0x344, mip.bits)
 
 	//case 0x3B0: rval = 0; break; //pmpaddr0
 	//case 0x3a0: rval = 0; break; //pmpcfg0
@@ -119,13 +119,13 @@ xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, ast_t inst, struct system 
 
 	switch (inst.Zicsr.csr) {
 	WRITE_CSR(0x300, mstatus.bits)
-	WRITE_CSR(0x304, mie)
+	WRITE_CSR(0x304, mie.bits)
 	WRITE_CSR(0x305, mtvec.bits)
 	WRITE_CSR(0x340, mscratch)
 	WRITE_CSR(0x341, mepc)
 	WRITE_CSR(0x342, mcause)
 	WRITE_CSR(0x343, mtval)
-	WRITE_CSR(0x344, mip)
+	WRITE_CSR(0x344, mip.bits)
 
 	default:
 		if (sys->write_csr)

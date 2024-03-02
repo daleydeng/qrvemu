@@ -58,16 +58,16 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 	if (!dword_is_zero(core->timermatch) &&
 	    dword_cmp(core->timer, core->timermatch)) {
 		core->wfi = false;
-		set_bit(&core->mip, INTR_MACHINE_TIMER);
-	} else if (get_bit(core->mip, INTR_MACHINE_TIMER)) {
-		clear_bit(&core->mip, INTR_MACHINE_TIMER);
+		core->mip.MTI = true;
+	} else if (core->mip.MTI) {
+		core->mip.MTI = false;
 	}
 
 	if (core->wfi)
 		return 1;
 
-	if (check_interrupt(core, INTR_MACHINE_TIMER)) {
-		handle_interrupt(core, INTR_MACHINE_TIMER);
+	if (check_interrupt(core, I_M_Timer)) {
+		handle_interrupt(core, I_M_Timer);
 		return 0;
 	}
 
