@@ -264,6 +264,40 @@ typedef union {
 	};
 } mcause_t;
 
+typedef union {
+	xlenbits bits;
+	struct {
+		xlenbits A:1; //0
+		xlenbits B:1; //1
+		xlenbits C:1; //2
+		xlenbits D:1; //3
+		xlenbits E:1; //4
+		xlenbits F:1; //5
+		xlenbits G:1; //6
+		xlenbits H:1; //7
+		xlenbits I:1; //8
+		xlenbits J:1; //9
+		xlenbits K:1; //10
+		xlenbits L:1; //11
+		xlenbits M:1; //12
+		xlenbits N:1; //13
+		xlenbits O:1; //14
+		xlenbits P:1; //15
+		xlenbits Q:1; //16
+		xlenbits R:1; //17
+		xlenbits S:1; //18
+		xlenbits T:1; //19
+		xlenbits U:1; //20
+		xlenbits V:1; //21
+		xlenbits W:1; //22
+		xlenbits X:1; //23
+		xlenbits Y:1; //24
+		xlenbits Z:1; //25
+		xlenbits :XLEN - 26 - 2;
+		xlenbits MXL:2; //XLEN-2 .. XLEN-1
+	};
+} misa_t;
+
 struct rvcore_rv32ima {
 	regtype regs[32];
 
@@ -286,8 +320,8 @@ struct rvcore_rv32ima {
 	enum Privilege cur_privilege;
 	
 	// not used by os, information only
-	regtype mvendorid;
-	regtype misa;
+	bits32 mvendorid;
+	misa_t misa;
 
 } __attribute__((aligned(ALIGN)));
 

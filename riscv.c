@@ -75,7 +75,7 @@ xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct system 
 
 	READ_CSR(0xf11, mvendorid)
 	READ_CSR(0x300, mstatus.bits)
-	READ_CSR(0x301, misa)
+	READ_CSR(0x301, misa.bits)
 	READ_CSR(0x304, mie.bits)
 	READ_CSR(0x305, mtvec.bits)
 
