@@ -6,6 +6,14 @@
 typedef uint32_t xlenbits;
 
 typedef uint32_t bits32;
+typedef union {
+	uint64_t v;
+	struct {
+		bits32 low;
+		bits32 high;
+	};
+} bits64;
+
 typedef xlenbits regtype;
 
 #define ALIGN 8
@@ -30,29 +38,6 @@ static inline void copy_bit2(xlenbits *reg, int b, int val)
 {
 	copy_bit(reg, b, val & 0x01);
 	copy_bit(reg, b + 1, val & 0x02);
-}
-
-typedef struct {
-	xlenbits low, high;
-} dword_t;
-
-static inline void dword_inc(dword_t *val, xlenbits delta)
-{
-	xlenbits new = val->low + delta;
-	if (new < val->low) {
-		val->high++;
-	}
-	val->low = new;
-}
-
-static inline bool dword_cmp(dword_t a, dword_t b)
-{
-	return (a.high > b.high || (a.high == b.high && a.low > b.low));
-}
-
-static inline bool dword_is_zero(dword_t a)
-{
-	return a.low == 0 && a.high == 0;
 }
 
 enum Privilege {User = 0, Supervisor = 1, Machine = 3};
@@ -303,9 +288,6 @@ struct rvcore_rv32ima {
 
 	xlenbits pc;
 
-	dword_t cycle;
-	dword_t timer, timermatch;
-
 	mstatus_t mstatus;
 	mtvec_t mtvec;
 	interrupts_t mie;
@@ -319,6 +301,10 @@ struct rvcore_rv32ima {
 
 	enum Privilege cur_privilege;
 	
+	// for time
+	bits64 mcycle;
+	bits64 mtime;
+
 	// not used by os, information only
 	bits32 mvendorid;
 	misa_t misa;
@@ -338,6 +324,7 @@ struct system {
 
 	bool wfi;
 	xlenbits reservation;
+	bits64 mtimecmp;
 
 	xlenbits ram_base;
 	xlenbits ram_size;

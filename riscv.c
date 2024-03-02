@@ -70,8 +70,10 @@ xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct system 
 	// https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
 	// Generally, support for Zicsr
 	switch (inst.Zicsr.csr) {
-	READ_CSR(0xC00, cycle.low)
-	READ_CSR(0xC80, cycle.low)
+		case 0xC00: rval = (xlenbits) core->mcycle.v; break;
+		case 0xC01: rval = (xlenbits) core->mtime.v; break;
+		case 0xC80: rval = core->mcycle.high; break;
+		case 0xC81: rval = core->mtime.high;break;
 
 	READ_CSR(0xf11, mvendorid)
 	READ_CSR(0x300, mstatus.bits)

@@ -53,10 +53,9 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 			uint8_t *image, uint32_t vProcAddress,
 			uint32_t elapsedUs, int count)
 {
-	dword_inc(&core->timer, elapsedUs);
+	core->mtime.v += elapsedUs;
 	// Handle Timer interrupt.
-	if (!dword_is_zero(core->timermatch) &&
-	    dword_cmp(core->timer, core->timermatch)) {
+	if (sys->mtimecmp.v && core->mtime.v >= sys->mtimecmp.v) {
 		sys->wfi = false;
 		core->mip.MTI = true;
 	} else if (core->mip.MTI) {
@@ -79,7 +78,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		bool rd_writed = false;
 		xlenbits ir = 0;
 		rval = 0;
-		dword_inc(&core->cycle, 1);
+		core->mcycle.v += 1;
 
 		xlenbits ofs_pc = core->pc - sys->ram_base;
 
@@ -195,9 +194,9 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				{
 					if (rsval ==
 					    0x1100bffc) // https://chromitem-soc.readthedocs.io/en/latest/clint.html
-						rval = core->timer.high;
+						rval = core->mtime.high;
 					else if (rsval == 0x1100bff8)
-						rval = core->timer.low;
+						rval = core->mtime.low;
 					else
 						MINIRV32_HANDLE_MEM_LOAD_CONTROL(
 							rsval, rval);
@@ -245,9 +244,9 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				if (addy >= 0x10000000 && addy < 0x12000000) {
 					// Should be stuff like SYSCON, 8250, CLNT
 					if (addy == 0x11004004) //CLNT
-						core->timermatch.high = rs2;
+						*((bits32*)&sys->mtimecmp + 1) = rs2;
 					else if (addy == 0x11004000) //CLNT
-						core->timermatch.low = rs2;
+						*((bits32*)&sys->mtimecmp) = rs2;
 					else if (addy ==
 						 0x11100000) //SYSCON (reboot, poweroff, etc.)
 					{

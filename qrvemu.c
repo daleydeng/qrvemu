@@ -177,13 +177,12 @@ restart:
 		(fixed_update) ? 0 : (GetTimeMicroseconds() / time_divisor);
 	int instrs_per_flip = single_step ? 1 : 1024;
 	for (rt = 0; rt < instct + 1 || instct < 0; rt += instrs_per_flip) {
-		uint64_t *this_ccount = ((uint64_t *)&core->cycle.low);
+		uint64_t *this_ccount = &core->mcycle.v;
 		uint32_t elapsedUs = 0;
 		if (fixed_update)
 			elapsedUs = *this_ccount / time_divisor - lastTime;
 		else
-			elapsedUs =
-				GetTimeMicroseconds() / time_divisor - lastTime;
+			elapsedUs = GetTimeMicroseconds() / time_divisor - lastTime;
 		lastTime += elapsedUs;
 
 		if (single_step)
@@ -207,8 +206,7 @@ restart:
 		case 0x7777:
 			goto restart; // syscon code for restart
 		case 0x5555:
-			printf("POWEROFF@0x%08x%08x\n", core->cycle.high,
-			       core->cycle.low);
+			printf("POWEROFF@0x%016lx\n", core->mcycle.v);
 			return 0; // syscon code for power-off
 		default:
 			printf("Unknown failure\n");
