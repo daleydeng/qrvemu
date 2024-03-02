@@ -21,7 +21,7 @@
 
 #include "riscv.h"
 
-int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *state,
+int MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *state,
 			uint8_t *image, uint32_t vProcAddress,
 			uint32_t elapsedUs, int count);
 
@@ -38,10 +38,11 @@ int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *state,
 	}
 #endif
 
-int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
+int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			uint8_t *image, uint32_t vProcAddress,
 			uint32_t elapsedUs, int count)
 {
+	int err = 0;
 	struct dram *dram = plat->dram;
 	core->mtime.v += elapsedUs;
 	// Handle Timer interrupt.
@@ -88,12 +89,12 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 
 		switch (inst.opcode) {
 		case 0x37: // LUI (0b0110111)
-			write_rd(core, inst.U.rd, inst.U.imm << 12);
+			wX(core, inst.U.rd, inst.U.imm << 12);
 			rd_writed = true;
 			break;
 
 		case 0x17: // AUIPC (0b0010111)
-			write_rd(core, inst.U.rd,
+			wX(core, inst.U.rd,
 				 core->pc + (inst.U.imm << 12));
 			rd_writed = true;
 			break;
@@ -106,7 +107,7 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				 inst.J.imm_12_19 << 12 | inst.J.imm_20 << 20);
 			rel_addr = sign_ext(rel_addr, 21);
 
-			write_rd(core, inst.J.rd, core->pc + 4);
+			wX(core, inst.J.rd, core->pc + 4);
 			core->pc += rel_addr;
 
 			rd_writed = true;
@@ -120,7 +121,7 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			xlenbits imm_se = sign_ext(inst.I.imm, 12);
 			// NOTICE, rs1 may override with rd, save rs1 first
 			xlenbits rs1 = core->regs[inst.I.rs1];
-			write_rd(core, inst.I.rd, core->pc + 4);
+			wX(core, inst.I.rd, core->pc + 4);
 			core->pc = (rs1 + imm_se) & ~1;
 
 			rd_writed = true;
@@ -222,6 +223,8 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		}
 		case 0x23: // Store 0b0100011
 		{
+			rd_writed = true;
+
 			uint32_t rs1 = REG((ir >> 15) & 0x1f);
 			uint32_t rs2 = REG((ir >> 20) & 0x1f);
 			uint32_t addy = ((ir >> 7) & 0x1f) |
@@ -386,7 +389,8 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		{
 			if ((inst.funct3 & MASK(2))) // Zicsr function.
 			{
-				execute_Zicsr(inst, core, plat);
+				if ((err = execute_Zicsr(inst, core, plat)))
+					return err;
 
 				rd_writed = true;
 
@@ -395,7 +399,9 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				int csrno = inst.priv_I.imm;
 				if (csrno == 0x105) //WFI (Wait for interrupts)
 				{
-					execute_wfi(inst, core, plat);
+					if ((err = execute_wfi(inst, core, plat)))
+						return err;
+					
 					core->pc = core->pc + 4;
 					return 1;
 
@@ -503,7 +509,7 @@ int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			break;
 
 		if (!rd_writed)
-			write_rd(core, i_rd, rval);
+			wX(core, i_rd, rval);
 
 		MINIRV32_POSTEXEC(core->pc, ir, trap);
 

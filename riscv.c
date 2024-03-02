@@ -59,7 +59,7 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 #define WRITE_CSR(no, name) \
 	case no: core->name = write_val; break;
 
-void execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) 
+int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) 
 {
 	xlenbits rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
@@ -135,17 +135,19 @@ void execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *pla
 		break;
 	}
 
-	write_rd(core, inst.Zicsr.rd, rval);
+	wX(core, inst.Zicsr.rd, rval);
+	return 0;
 }
 
-void execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
+int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
 	assert(inst.priv_I.imm == 0x105);
 	core->mstatus.MIE = true;
 	plat->wfi = true;
+	return 0;
 }
 
-void execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
+int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
 	assert(inst.priv_I.imm == 0x302); // 0b0011 0000 0010
 	// refer Volume II: RISC-V Privileged Architectures V20211203 manual 8.6.4 Trap Return
@@ -159,7 +161,65 @@ void execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat
 	// clear_bit2(&core->mstatus, MSTATUS_MPP); ??? dont work here
 	core->mstatus.MIE = core->mstatus.MPIE;
 	core->mstatus.MPIE = true;
+	return 0;
 }
+
+// int execute_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
+// {
+// 	struct dram *dram = plat->dram;
+// 	regtype rs1 = rX(core, inst.S.rs1);
+// 	regtype rs2 = rX(core, inst.S.rs2);
+// 	xlenbits imm = sign_ext(inst.S.imm_0_4 | inst.S.imm_5_11 << 5, 12);
+
+// 	xlenbits vaddr = rs1 + imm;
+
+// 	if (dram_is_in(dram, vaddr)) {
+// 		xlenbits paddr = dram_virt_to_phys(dram, vaddr);
+// 		switch (inst.S.funct3) {
+// 		//SB, SH, SW
+// 		case 0:
+// 			dram_sb(dram, paddr, rs2);
+// 			break;
+// 		case 1:
+// 			dram_sh(dram, paddr, rs2);
+// 			break;
+// 		case 2:
+// 			dram_sw(dram, paddr, rs2);
+// 			break;
+// 		default:
+// 			trap = (2 + 1);
+// 		}
+// 		return 0;
+// 	}
+
+// 	xlenbits addr_off = rs1 + imm - dram->base;
+
+// 	if (addy >= plat->dram->size - 3) {
+// 		addy += plat->dram->base;
+// 		if (addy >= 0x10000000 && addy < 0x12000000) {
+// 			// Should be stuff like SYSCON, 8250, CLNT
+// 			if (addy == 0x11004004) //CLNT
+// 				*((bits32 *)&plat->mtimecmp +
+// 					1) = rs2;
+// 			else if (addy == 0x11004000) //CLNT
+// 				*((bits32 *)&plat->mtimecmp) =
+// 					rs2;
+// 			else if (addy ==
+// 					0x11100000) //SYSCON (reboot, poweroff, etc.)
+// 			{
+// 				SETCSR(pc, core->pc + 4);
+// 				return rs2; // NOTE: PC will be PC of Syscon.
+// 			} else
+// 				MINIRV32_HANDLE_MEM_STORE_CONTROL(
+// 					addy, rs2);
+// 		} else {
+// 			trap = (7 + 1); // Store access fault.
+// 			rval = addy;
+// 		}
+// 	} else {
+
+// 	}
+// }
 
 // void proc_inst_priv(struct plattem *plat, struct inst inst)
 // {

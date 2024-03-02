@@ -98,6 +98,15 @@ typedef union {
 
 	struct {
 		bits32 opcode : 7;
+		bits32 imm_0_4 : 5;
+		bits32 funct3 : 3;
+		bits32 rs1 : 5;
+		bits32 rs2 : 5;
+		bits32 imm_5_11 : 7;
+	} S;
+
+	struct {
+		bits32 opcode : 7;
 		bits32 imm_11 : 1;
 		bits32 imm_1_4 : 4;
 		bits32 funct3 : 3;
@@ -312,14 +321,17 @@ struct rvcore_rv32ima {
 
 } __attribute__((aligned(ALIGN)));
 
-static inline void write_rd(struct rvcore_rv32ima *core, int rd, xlenbits val)
+static inline void wX(struct rvcore_rv32ima *core, int rd, regtype val)
 {
 	if (rd) {
 		assert(rd < XLEN);
 		core->regs[rd] = val;
 	}
 }
-
+static inline regtype rX(struct rvcore_rv32ima *core, int rs)
+{
+	return rs ? core->regs[rs] : 0;
+}
 struct dram {
 	xlenbits base;
 	size_t size;
@@ -335,35 +347,53 @@ void dram_alloc(struct dram *dram, xlenbits base, size_t size);
 
 static inline void dram_sw(struct dram *dram, xlenbits addr, uint32_t val)
 {
+	assert(addr < dram->size);
 	*(uint32_t*)(dram->image + addr) = val;
 }
 static inline void dram_sh(struct dram *dram, xlenbits addr, uint16_t val)
 {
+	assert(addr < dram->size);
 	*(uint16_t*)(dram->image + addr) = val;
 }
 static inline void dram_sb(struct dram *dram, xlenbits addr, uint8_t val)
 {
+	assert(addr < dram->size);
 	*(uint8_t*)(dram->image + addr) = val;
 }
 static inline uint32_t dram_lw(struct dram *dram, xlenbits addr)
 {
+	assert(addr < dram->size);
 	return *(uint32_t*)(dram->image + addr);
 }
 static inline uint16_t dram_lhu(struct dram *dram, xlenbits addr)
 {
+	assert(addr < dram->size);
 	return *(uint16_t*)(dram->image + addr);
 }
 static inline uint16_t dram_lbu(struct dram *dram, xlenbits addr)
 {
+	assert(addr < dram->size);
 	return *(uint8_t*)(dram->image + addr);
 }
 static inline int16_t dram_lh(struct dram *dram, xlenbits addr)
 {
+	assert(addr < dram->size);
 	return *(int16_t*)(dram->image + addr);
 }
 static inline int16_t dram_lb(struct dram *dram, xlenbits addr)
 {
+	assert(addr < dram->size);
 	return *(int8_t*)(dram->image + addr);
+}
+
+static inline bool dram_is_in(struct dram *dram, xlenbits vaddr)
+{
+	return vaddr >= dram->base && (vaddr - dram->base) < dram->size;
+}
+
+static inline xlenbits dram_virt_to_phys(struct dram *dram, xlenbits vaddr)
+{
+	return vaddr - dram->base;
 }
 
 struct platform {
@@ -403,7 +433,7 @@ static inline void handle_exception(struct rvcore_rv32ima *core,
 	handle_trap(core, mcause, mtval);
 }
 
-void execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-void execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-void execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-void execute_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+int execute_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
