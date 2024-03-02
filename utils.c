@@ -1,33 +1,55 @@
-#include <stdio.h>
-#include <stdint.h>
+#include <assert.h>
+#include <unistd.h>
+
 #include "utils.h"
 
+#define MAXLEN 255
 
-long load_file(void *ptr, size_t size, const char *fname, bool back_mapping)
+void get_filename(FILE *fp, char *fname)
 {
-	FILE *f = fopen(fname, "rb");
-	if (!f || ferror(f)) {
+	assert(fp);
+	char proclink[MAXLEN];
+	int fno = fileno(fp);
+	snprintf(proclink, MAXLEN, "/proc/self/fd/%d", fno);
+	ssize_t r = readlink(proclink, fname, MAXLEN);
+	assert(r>=0);
+	fname[r] = '\0';
+}
+
+long get_file_size(FILE *fp)
+{
+	assert(fp);
+	long cur_pos = ftell(fp);
+	assert(!fseek(fp, 0, SEEK_END));
+	long flen = ftell(fp);
+	assert(!fseek(fp, cur_pos, SEEK_SET));
+	return flen;
+}
+
+long load_file(FILE *fp, void *ptr, size_t size, bool back_mapping)
+{
+	fseek(fp, 0, SEEK_SET);
+	if (!fp || ferror(fp)) {
+		char fname[MAXLEN];
+		get_filename(fp, fname);
 		fprintf(stderr, "Error: \"%s\" not found\n", fname);
 		return -5;
 	}
 
-	fseek(f, 0, SEEK_END);
-	long flen = ftell(f);
-	fseek(f, 0, SEEK_SET);
-	if (flen > size) {
+	long flen = get_file_size(fp);
+	if (size > 0 && flen > size) {
 		fprintf(stderr,
 			"Error: Could not fit RAM image (%ld bytes) into %lu\n",
 			flen, size);
 		return -6;
 	}
 
-	if (back_mapping)
+	if (size > 0 && back_mapping)
 		ptr = ptr + size - flen;
 
-	if (fread(ptr, flen, 1, f) != 1) {
+	if (fread(ptr, flen, 1, fp) != 1) {
 		fprintf(stderr, "Error: Could not load image.\n");
 		return -7;
 	}
-	fclose(f);
 	return flen;
 }

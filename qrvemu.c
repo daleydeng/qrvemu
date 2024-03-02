@@ -134,6 +134,19 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	if (!dtb_file_name) {
+		fprintf(stderr,
+			"Error: Could not open dtb \"%s\"\n",
+			dtb_file_name);
+		return -9;
+	}
+
+	FILE *dtb_fp = fopen(dtb_file_name, "rb");
+	FILE *kernel_fp = fopen(image_file_name, "rb");
+
+	long dtb_len = get_file_size(dtb_fp);
+
+	RAM_SIZE += dtb_len;
 
 	sys = calloc(1, sizeof(struct system));
 	assert(sys);
@@ -142,21 +155,16 @@ int main(int argc, char **argv)
 	sys->write_csr = write_other_csr;
 
 	long flen = 0;
-	size_t dtb_len = 0;
 
 restart:
-	if ((flen = load_file(sys->image, sys->ram_size, image_file_name, false)) < 0)
+	if ((flen = load_file(kernel_fp, sys->image, sys->ram_size, false)) < 0)
 		return flen;
+	fclose(kernel_fp);
 
-	if (!dtb_file_name) {
-		fprintf(stderr,
-			"Error: Could not open dtb \"%s\"\n",
-			dtb_file_name);
-		return -9;
-	}
 
-	if ((dtb_len = load_file(sys->image, sys->ram_size, dtb_file_name, true)) < 0)
+	if ((dtb_len = load_file(dtb_fp, sys->image, sys->ram_size, true)) < 0)
 	    return dtb_len;
+	fclose(dtb_fp);
 
 	if( kernel_command_line )
 		strncpy( (char*)(sys_ram_end(sys) - dtb_len + 0xc0 ), kernel_command_line, 54 );
