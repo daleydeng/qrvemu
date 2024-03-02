@@ -77,18 +77,18 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 	for (int icount = 0; icount < count; icount++) {
 		bool is_jump = false;
 		bool rd_writed = false;
-		word_t ir = 0;
+		xlenbits ir = 0;
 		rval = 0;
 		dword_inc(&core->cycle, 1);
 
-		word_t ofs_pc = core->pc - sys->ram_base;
+		xlenbits ofs_pc = core->pc - sys->ram_base;
 
 		if (ofs_pc >= sys->ram_size) {
 			handle_trap(core, EXC_INST_ACCESS_FAULT, core->pc);
 			return 0;
 		}
 
-		if (ofs_pc & 3) {
+		if (ofs_pc & 0x3) {
 			handle_trap(core, EXC_INST_ADDR_MISALIGNED, core->pc);
 			return 0;
 		}
@@ -112,7 +112,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		case 0x6F: // JAL (0b1101111)
 		{
 			is_jump = true;
-			word_t rel_addr =
+			xlenbits rel_addr =
 				(inst.J.imm_1_10 << 1 | inst.J.imm_11 << 11 |
 				 inst.J.imm_12_19 << 12 | inst.J.imm_20 << 20);
 			rel_addr = sign_ext(rel_addr, 21);
@@ -128,9 +128,9 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		case 0x67: // JALR (0b1100111)
 		{
 			is_jump = true;
-			word_t imm_se = sign_ext(inst.I.imm, 12);
+			xlenbits imm_se = sign_ext(inst.I.imm, 12);
 			// NOTICE, rs1 may override with rd, save rs1 first
-			word_t rs1 = core->regs[inst.I.rs1];
+			xlenbits rs1 = core->regs[inst.I.rs1];
 			write_rd(core, inst.I.rd, core->pc + 4);
 			core->pc = (rs1 + imm_se) & ~1;
 			
@@ -140,7 +140,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 
 		case 0x63: // Branch (0b1100011)
 		{
-			word_t imm = sign_ext((inst.B.imm_1_4 << 1
+			xlenbits imm = sign_ext((inst.B.imm_1_4 << 1
 				| inst.B.imm_5_10 << 5
 				| inst.B.imm_11 << 11
 				| inst.B.imm_12 << 12), 13);
@@ -170,6 +170,8 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				break;
 			default:
 				trap = (2 + 1);
+				handle_trap(core, EXC_INST_ADDR_MISALIGNED, core->pc);
+				return 0;
 			}
 
 			if (is_jump)

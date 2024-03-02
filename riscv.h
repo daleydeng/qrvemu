@@ -2,9 +2,12 @@
 #include <stdbool.h>
 #include <assert.h>
 
-typedef uint32_t word_t;
+#define XLEN 32
+typedef uint32_t xlenbits;
+
+typedef xlenbits regtype;
+
 typedef uint32_t inst_t;
-#define XLEN (sizeof(word_t) * 8)
 
 #define ALIGN 8
 
@@ -15,7 +18,7 @@ typedef uint32_t inst_t;
 #define clear_bit(reg, b) ((*(reg)) &=~ (1 << (b)))
 #define clear_bit2(reg, b) ((*(reg)) &=~ (0x3 << (b)))
 
-static inline void copy_bit(word_t *reg, int b, bool val)
+static inline void copy_bit(xlenbits *reg, int b, bool val)
 {
 	if (val) {
 		set_bit(reg, b);
@@ -24,13 +27,11 @@ static inline void copy_bit(word_t *reg, int b, bool val)
 	}
 }
 
-static inline void copy_bit2(word_t *reg, int b, int val)
+static inline void copy_bit2(xlenbits *reg, int b, int val)
 {
 	copy_bit(reg, b, val & 0x01);
 	copy_bit(reg, b + 1, val & 0x02);
 }
-
-enum mstatus { MSTATUS_MIE = 3, MSTATUS_MPIE = 7, MSTATUS_MPP = 11 };
 
 enum trap_type { TRAP_NONE, INTERRUPT, EXCEPTION };
 
@@ -52,12 +53,12 @@ enum exception_type {
 };
 
 typedef struct {
-	word_t low, high;
+	xlenbits low, high;
 } dword_t;
 
-static inline void dword_inc(dword_t *val, word_t delta)
+static inline void dword_inc(dword_t *val, xlenbits delta)
 {
-	word_t new = val->low + delta;
+	xlenbits new = val->low + delta;
 	if (new < val->low) {
 		val->high++;
 	}
@@ -115,102 +116,130 @@ enum reg_name {
 struct inst {
 	union {
 		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
+			xlenbits opcode:7;
+			xlenbits rd:5;
+			xlenbits funct3:3;
 		} v;
-		
+
 		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
-			word_t rs1:5;
-			word_t imm:12;
+			xlenbits opcode:7;
+			xlenbits rd:5;
+			xlenbits funct3:3;
+			xlenbits rs1:5;
+			xlenbits imm:12;
 		} I;
 
 		struct {
-			word_t opcode:7;
-			word_t imm_11:1;
-			word_t imm_1_4:4;
-			word_t funct3:3;
-			word_t rs1:5;
-			word_t rs2:5;
-			word_t imm_5_10:6;
-			word_t imm_12:1;
+			xlenbits opcode:7;
+			xlenbits imm_11:1;
+			xlenbits imm_1_4:4;
+			xlenbits funct3:3;
+			xlenbits rs1:5;
+			xlenbits rs2:5;
+			xlenbits imm_5_10:6;
+			xlenbits imm_12:1;
 		} B;
 
 		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t imm:20;
+			xlenbits opcode:7;
+			xlenbits rd:5;
+			xlenbits imm:20;
 		} U;
 		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t imm_12_19:8;
-			word_t imm_11:1;
-			word_t imm_1_10:10;
-			word_t imm_20:1;
+			xlenbits opcode:7;
+			xlenbits rd:5;
+			xlenbits imm_12_19:8;
+			xlenbits imm_11:1;
+			xlenbits imm_1_10:10;
+			xlenbits imm_20:1;
 		} J;
 		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
-			word_t rs1:5;
-			word_t rs2:5;
-			word_t funct7:7;
+			xlenbits opcode:7;
+			xlenbits rd:5;
+			xlenbits funct3:3;
+			xlenbits rs1:5;
+			xlenbits rs2:5;
+			xlenbits funct7:7;
 		} priv_R;
 		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
-			word_t rs1:5;
-			word_t imm:12;
+			xlenbits opcode:7;
+			xlenbits rd:5;
+			xlenbits funct3:3;
+			xlenbits rs1:5;
+			xlenbits imm:12;
 		} priv_I;
 		struct {
-			word_t opcode:7;
-			word_t rd:5;
-			word_t funct3:3;
-			word_t rs1_uimm:5;
-			word_t csr:12;
+			xlenbits opcode:7;
+			xlenbits rd:5;
+			xlenbits funct3:3;
+			xlenbits rs1_uimm:5;
+			xlenbits csr:12;
 		} Zicsr;
 	};
 } __attribute__((packed));
 
-static inline word_t sign_ext(word_t imm, int size) {
+static inline xlenbits sign_ext(xlenbits imm, int size) {
 	return get_bit(imm, size-1) ? imm | ((1 << (XLEN - size)) - 1) << size : imm;
 }
 
+typedef union{
+	struct {
+		xlenbits UIE:1; // 0
+		xlenbits SIE:1; // 1
+		xlenbits :1;    // 2
+		xlenbits MIE:1; // 3
+
+		xlenbits UPIE:1; //4
+		xlenbits SPIE:1; //5
+		xlenbits :1;     // 6
+		xlenbits MPIE:1; //7
+
+		xlenbits SPP:1;  //8
+		xlenbits VS:2;   //9-10
+		xlenbits MPP:2;  //11-12
+		xlenbits FS:2;   //13-14
+		xlenbits XS:2;   //15-16
+		xlenbits MPRV:1; //17
+		xlenbits SUM:1;  //18
+		xlenbits MXR:1;  //19
+		xlenbits TVM:1;  //20
+		xlenbits TW:1;   //21
+		xlenbits TSR:1;  //22
+		xlenbits :XLEN - 1 - 23; //
+		xlenbits SD:1;   // XLEN - 1
+	} __attribute__((packed));
+	xlenbits bits;
+} mstatus_t;
+
 struct rvcore_rv32ima {
-	uint32_t regs[32];
+	regtype regs[32];
 
-	uint32_t pc;
-	uint32_t mstatus;
+	xlenbits pc;
+	
 	dword_t cycle;
-
 	dword_t timer, timermatch;
 
-	uint32_t mscratch;
-	uint32_t mtvec;
-	uint32_t mie;
-	uint32_t mip;
+	mstatus_t mstatus;
+	regtype mscratch;
+	regtype mtvec;
+	regtype mie;
+	regtype mip;
 
-	uint32_t mepc;
-	uint32_t mtval;
-	uint32_t mcause;
+	regtype mepc;
+	regtype mtval;
+	regtype mcause;
 
 	enum priv priv;
 	bool wfi;
-	word_t reservation;
-
+	xlenbits reservation;
 
 	// not used by os, information only
-	word_t mvendorid;
-	word_t misa;
+	regtype mvendorid;
+	regtype misa;
 	
 } __attribute__((aligned(ALIGN)));
 
-static inline void write_rd(struct rvcore_rv32ima *core, int rd, word_t val)
+static inline void write_rd(struct rvcore_rv32ima *core, int rd, xlenbits val)
 {
 	if (rd) {
 		assert(rd < XLEN);
@@ -222,35 +251,35 @@ static inline void write_rd(struct rvcore_rv32ima *core, int rd, word_t val)
 struct system {
     struct rvcore_rv32ima *core;
 
-	word_t ram_base;
-	word_t ram_size;
+	xlenbits ram_base;
+	xlenbits ram_size;
     uint8_t *image;
 
-    word_t (*read_csr)(struct system *sys, struct inst);
-    void (*write_csr)(struct system *sys, struct inst, word_t val);
+    xlenbits (*read_csr)(struct system *sys, struct inst);
+    void (*write_csr)(struct system *sys, struct inst, xlenbits val);
 };
 
-static inline word_t sys_ram_end(struct system *sys) {
+static inline xlenbits sys_ram_end(struct system *sys) {
 	return sys->ram_base + sys->ram_size;
 }
 
-void sys_alloc_memory(struct system *sys, word_t base, word_t size);
+void sys_alloc_memory(struct system *sys, xlenbits base, xlenbits size);
 void dump_sys(struct system *sys);
 
 static inline bool check_interrupt(const struct rvcore_rv32ima *core, enum interrupt_type bit)
 {
-	return get_bit(core->mstatus, MSTATUS_MIE) &&
+	return core->mstatus.MIE &&
 	       get_bit(core->mip, bit) && get_bit(core->mie, bit);
 }
 
-void handle_trap(struct rvcore_rv32ima *core, word_t mcause, word_t mtval);
+void handle_trap(struct rvcore_rv32ima *core, xlenbits mcause, xlenbits mtval);
 static inline void handle_interrupt(struct rvcore_rv32ima *core, enum interrupt_type bit)
 {
 	handle_trap(core, 1 << (XLEN - 1) | bit, 0);
 }
 
 
-word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys);
+xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys);
 void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst);
 void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst);
 

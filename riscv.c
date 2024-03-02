@@ -3,7 +3,7 @@
 #include <assert.h>
 #include "riscv.h"
 
-void sys_alloc_memory(struct system *sys, word_t base, word_t size)
+void sys_alloc_memory(struct system *sys, xlenbits base, xlenbits size)
 {
     sys->ram_base = base;
     sys->ram_size = size;
@@ -40,17 +40,16 @@ void dump_sys(struct system *sys)
 	       regs[28], regs[29], regs[30], regs[31]);
 }
 
-void handle_trap(struct rvcore_rv32ima *core, word_t mcause, word_t mtval)
+void handle_trap(struct rvcore_rv32ima *core, xlenbits mcause, xlenbits mtval)
 {
 	core->mcause = mcause;
 	core->mtval = mtval;
 	core->mepc = core->pc;
 	core->pc = core->mtvec;
 
-	copy_bit(&core->mstatus, MSTATUS_MPIE,
-			get_bit(core->mstatus, MSTATUS_MIE));
-	clear_bit(&core->mstatus, MSTATUS_MIE);
-	copy_bit2(&core->mstatus, MSTATUS_MPP, core->priv);
+	core->mstatus.MPIE = core->mstatus.MIE;
+	core->mstatus.MIE = false;
+	core->mstatus.MPP = core->priv;
 
 	core->priv = PRIV_MACHINE;
 }
@@ -60,13 +59,13 @@ void handle_trap(struct rvcore_rv32ima *core, word_t mcause, word_t mtval)
 #define WRITE_CSR(no, name) \
 	case no: core->name = write_val; break;
 
-word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys) 
+xlenbits proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct system *sys) 
 {
-	word_t rval = 0;
+	xlenbits rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
-	word_t uimm = inst.Zicsr.rs1_uimm;
-	word_t rs1 = core->regs[i_rs1];
-	word_t write_val = rs1;
+	xlenbits uimm = inst.Zicsr.rs1_uimm;
+	xlenbits rs1 = core->regs[i_rs1];
+	xlenbits write_val = rs1;
 
 	// https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
 	// Generally, support for Zicsr
@@ -75,7 +74,7 @@ word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct sys
 	READ_CSR(0xC80, cycle.low)
 
 	READ_CSR(0xf11, mvendorid)
-	READ_CSR(0x300, mstatus)
+	READ_CSR(0x300, mstatus.bits)
 	READ_CSR(0x301, misa)
 	READ_CSR(0x304, mie)
 	READ_CSR(0x305, mtvec)
@@ -119,7 +118,7 @@ word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct sys
 	}
 
 	switch (inst.Zicsr.csr) {
-	WRITE_CSR(0x300, mstatus)
+	WRITE_CSR(0x300, mstatus.bits)
 	WRITE_CSR(0x304, mie)
 	WRITE_CSR(0x305, mtvec)
 	WRITE_CSR(0x340, mscratch)
@@ -140,7 +139,7 @@ word_t proc_inst_Zicsr(struct rvcore_rv32ima *core, struct inst inst, struct sys
 void proc_inst_wfi(struct rvcore_rv32ima *core, struct inst inst)
 {
 	assert(inst.priv_I.imm == 0x105);
-	set_bit(&core->mstatus, MSTATUS_MIE);
+	core->mstatus.MIE = true;
 	core->wfi = true;
 }
 
@@ -154,10 +153,10 @@ void proc_inst_mret(struct rvcore_rv32ima *core, struct inst inst)
 	// MIE=MPIE, and MPIE=1. Lastly, MRET sets the privilege mode as previously determined, and
 	// sets pc = mepc.
 
-	core->priv = get_bit2(core->mstatus, MSTATUS_MPP);
+	core->priv = core->mstatus.MPP;;
 	// clear_bit2(&core->mstatus, MSTATUS_MPP); ??? dont work here
-	copy_bit(&core->mstatus, MSTATUS_MIE, get_bit(core->mstatus, MSTATUS_MPIE));
-	set_bit(&core->mstatus, MSTATUS_MPIE);
+	core->mstatus.MIE = core->mstatus.MPIE;
+	core->mstatus.MPIE = true;
 }
 
 // void proc_inst_priv(struct system *sys, struct inst inst)
