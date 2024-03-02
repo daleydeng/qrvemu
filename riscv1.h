@@ -38,21 +38,21 @@ int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *state,
 	}
 #endif
 
-int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *core,
+int32_t MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			uint8_t *image, uint32_t vProcAddress,
 			uint32_t elapsedUs, int count)
 {
-	struct dram *dram = sys->dram;
+	struct dram *dram = plat->dram;
 	core->mtime.v += elapsedUs;
 	// Handle Timer interrupt.
-	if (sys->mtimecmp.v && core->mtime.v >= sys->mtimecmp.v) {
-		sys->wfi = false;
+	if (plat->mtimecmp.v && core->mtime.v >= plat->mtimecmp.v) {
+		plat->wfi = false;
 		core->mip.MTI = true;
 	} else if (core->mip.MTI) {
 		core->mip.MTI = false;
 	}
 
-	if (sys->wfi)
+	if (plat->wfi)
 		return 1;
 
 	if (check_interrupt(core, I_M_Timer)) {
@@ -70,9 +70,9 @@ int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *core,
 		rval = 0;
 		core->mcycle.v += 1;
 
-		xlenbits ofs_pc = core->pc - sys->dram->base;
+		xlenbits ofs_pc = core->pc - plat->dram->base;
 
-		if (ofs_pc >= sys->dram->size) {
+		if (ofs_pc >= plat->dram->size) {
 			handle_exception(core, E_Fetch_Access_Fault, core->pc);
 			return 0;
 		}
@@ -178,9 +178,9 @@ int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *core,
 			int32_t imm_se = imm | ((imm & 0x800) ? 0xfffff000 : 0);
 			uint32_t rsval = rs1 + imm_se;
 
-			rsval -= sys->dram->base;
-			if (rsval >= sys->dram->size - 3) {
-				rsval += sys->dram->base;
+			rsval -= plat->dram->base;
+			if (rsval >= plat->dram->size - 3) {
+				rsval += plat->dram->base;
 				if (rsval >= 0x10000000 &&
 				    rsval < 0x12000000) // UART, CLNT
 				{
@@ -228,18 +228,18 @@ int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *core,
 					((ir & 0xfe000000) >> 20);
 			if (addy & 0x800)
 				addy |= 0xfffff000;
-			addy += rs1 - sys->dram->base;
+			addy += rs1 - plat->dram->base;
 			i_rd = 0;
 
-			if (addy >= sys->dram->size - 3) {
-				addy += sys->dram->base;
+			if (addy >= plat->dram->size - 3) {
+				addy += plat->dram->base;
 				if (addy >= 0x10000000 && addy < 0x12000000) {
 					// Should be stuff like SYSCON, 8250, CLNT
 					if (addy == 0x11004004) //CLNT
-						*((bits32 *)&sys->mtimecmp +
+						*((bits32 *)&plat->mtimecmp +
 						  1) = rs2;
 					else if (addy == 0x11004000) //CLNT
-						*((bits32 *)&sys->mtimecmp) =
+						*((bits32 *)&plat->mtimecmp) =
 							rs2;
 					else if (addy ==
 						 0x11100000) //SYSCON (reboot, poweroff, etc.)
@@ -386,14 +386,14 @@ int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *core,
 		{
 			if ((inst.funct3 & MASK(2))) // Zicsr function.
 			{
-				rval = proc_inst_Zicsr(inst, core, sys);
+				rval = proc_inst_Zicsr(inst, core, plat);
 
 			} else if (inst.funct3 == 0x0) // "SYSTEM" 0b000
 			{
 				int csrno = inst.priv_I.imm;
 				if (csrno == 0x105) //WFI (Wait for interrupts)
 				{
-					proc_inst_wfi(inst, core, sys);
+					proc_inst_wfi(inst, core, plat);
 					core->pc = core->pc + 4;
 					return 1;
 
@@ -430,13 +430,13 @@ int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *core,
 			uint32_t rs2 = REG((ir >> 20) & 0x1f);
 			uint32_t irmid = (ir >> 27) & 0x1f;
 
-			rs1 -= sys->dram->base;
+			rs1 -= plat->dram->base;
 
 			// We don't implement load/store from UART or CLNT with RV32A here.
 
-			if (rs1 >= sys->dram->size - 3) {
+			if (rs1 >= plat->dram->size - 3) {
 				trap = (7 + 1); //Store/AMO access fault
-				rval = rs1 + sys->dram->base;
+				rval = rs1 + plat->dram->base;
 			} else {
 				rval = dram_lw(dram, rs1);
 
@@ -445,10 +445,10 @@ int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *core,
 				switch (irmid) {
 				case 2: //LR.W (0b00010)
 					dowrite = 0;
-					sys->reservation = rs1;
+					plat->reservation = rs1;
 					break;
 				case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
-					rval = sys->reservation != rs1;
+					rval = plat->reservation != rs1;
 					dowrite =
 						!rval; // Only write if slot is valid.
 					break;
