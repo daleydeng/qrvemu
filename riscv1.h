@@ -18,8 +18,8 @@
 #include "riscv.h"
 
 int MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *state,
-			uint8_t *image, uint32_t vProcAddress,
-			uint32_t elapsedUs, int count);
+		    uint8_t *image, uint32_t vProcAddress, uint32_t elapsedUs,
+		    int count);
 
 #ifndef MINIRV32_CUSTOM_INTERNALS
 #define CSR(x) core->x
@@ -35,8 +35,8 @@ int MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *state,
 #endif
 
 int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
-			uint8_t *image, uint32_t vProcAddress,
-			uint32_t elapsedUs, int count)
+		    uint8_t *image, uint32_t vProcAddress, uint32_t elapsedUs,
+		    int count)
 {
 	int err = 0;
 	struct dram *dram = plat->dram;
@@ -57,28 +57,24 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		return 0;
 	}
 
-	uint32_t rval = 0;
-
 	for (int icount = 0; icount < count; icount++) {
-		xlenbits ir = 0;
-		rval = 0;
 		core->mcycle.v += 1;
-
-		xlenbits ofs_pc = core->pc - plat->dram->base;
+		xlenbits pc = core->pc;
+		xlenbits ofs_pc = pc - plat->dram->base;
 
 		if (ofs_pc >= plat->dram->size) {
-			handle_exception(core, E_Fetch_Access_Fault, core->pc);
+			handle_exception(core, E_Fetch_Access_Fault, pc);
 			return 0;
 		}
 
 		if (ofs_pc & 0x3) {
-			handle_exception(core, E_Fetch_Addr_Align, core->pc);
+			handle_exception(core, E_Fetch_Addr_Align, pc);
 			return 0;
 		}
 
-		ir = dram_lw(dram, ofs_pc);
+		xlenbits ir = dram_lw(dram, ofs_pc);
 		ast_t inst = { .bits = ir };
-		core->next_pc = core->pc + 4;
+		core->next_pc = pc + 4;
 
 		switch (inst.opcode) {
 		case 0x37: // LUI (0b0110111)
@@ -86,8 +82,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			break;
 
 		case 0x17: // AUIPC (0b0010111)
-			wX(core, inst.U.rd,
-				 core->pc + (inst.U.imm << 12));
+			wX(core, inst.U.rd, pc + (inst.U.imm << 12));
 			break;
 
 		case 0x6F: // JAL (0b1101111)
@@ -97,17 +92,17 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				 inst.J.imm_12_19 << 12 | inst.J.imm_20 << 20);
 			rel_addr = sign_ext(rel_addr, 21);
 
-			wX(core, inst.J.rd, core->pc + 4);
-			core->next_pc = core->pc + rel_addr;
+			wX(core, inst.J.rd, pc + 4);
+			core->next_pc = pc + rel_addr;
 			break;
 		}
 
 		case 0x67: // JALR (0b1100111)
-		{\
+		{
 			xlenbits imm_se = sign_ext(inst.I.imm, 12);
 			// NOTICE, rs1 may override with rd, save rs1 first
 			xlenbits rs1 = rX(core, inst.I.rs1);
-			wX(core, inst.I.rd, core->pc + 4);
+			wX(core, inst.I.rd, pc + 4);
 			core->next_pc = (rs1 + imm_se) & ~1;
 			break;
 		}
@@ -141,17 +136,16 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				jumped = (uint32_t)rs1 < (uint32_t)rs2; // bltu
 				break;
 			case 7:
-				jumped = (uint32_t)rs1 >=
-					  (uint32_t)rs2; // bgeu
+				jumped = (uint32_t)rs1 >= (uint32_t)rs2; // bgeu
 				break;
 			default:
 				handle_exception(core, E_Illegal_Instr,
-						 core->pc);
+						 pc);
 				return 0;
 			}
 
 			if (jumped)
-				core->next_pc = core->pc + imm;
+				core->next_pc = pc + imm;
 
 			break;
 		}
@@ -161,6 +155,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			uint32_t imm = ir >> 20;
 			int32_t imm_se = imm | ((imm & 0x800) ? 0xfffff000 : 0);
 			uint32_t rsval = rs1 + imm_se;
+			xlenbits rval = 0;
 
 			rsval -= plat->dram->base;
 			if (rsval >= plat->dram->size - 3) {
@@ -177,7 +172,9 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						MINIRV32_HANDLE_MEM_LOAD_CONTROL(
 							rsval, rval);
 				} else {
-					handle_exception(core, E_Load_Access_Fault, rsval);
+					handle_exception(core,
+							 E_Load_Access_Fault,
+							 rsval);
 					return 0;
 				}
 			} else {
@@ -199,7 +196,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					rval = dram_lhu(dram, rsval);
 					break;
 				default:
-					handle_exception(core, E_Illegal_Instr, inst.bits);
+					handle_exception(core, E_Illegal_Instr,
+							 inst.bits);
 					return 0;
 				}
 			}
@@ -237,7 +235,9 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						MINIRV32_HANDLE_MEM_STORE_CONTROL(
 							addy, rs2);
 				} else {
-					handle_exception(core, E_SAMO_Access_Fault, addy);
+					handle_exception(core,
+							 E_SAMO_Access_Fault,
+							 addy);
 					return 0;
 				}
 			} else {
@@ -253,7 +253,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					dram_sw(dram, addy, rs2);
 					break;
 				default:
-					handle_exception(core, E_Illegal_Instr, inst.bits);
+					handle_exception(core, E_Illegal_Instr,
+							 inst.bits);
 					return 0;
 				}
 			}
@@ -267,6 +268,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			uint32_t rs1 = REG((ir >> 15) & 0x1f);
 			uint32_t is_reg = !!(ir & 0x20);
 			uint32_t rs2 = is_reg ? REG(imm & 0x1f) : imm;
+			xlenbits rval = 0;
 
 			if (is_reg && (ir & 0x02000000)) {
 				switch ((ir >> 12) & 7) //0x02000000 = RV32M
@@ -330,7 +332,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						rval = rs1 % rs2;
 					break; // REMU
 				}
-				
+
 			} else {
 				switch ((ir >> 12) &
 					7) // These could be either op-immediate or op commands.  Be careful.
@@ -383,38 +385,52 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				int csrno = inst.priv_I.imm;
 				if (csrno == 0x105) //WFI (Wait for interrupts)
 				{
-					if ((err = execute_wfi(inst, core, plat)))
+					if ((err = execute_wfi(inst, core,
+							       plat)))
 						return err;
-					
+
 					tick_pc(core);
 					return 1;
 
 				} else if (((csrno & 0xff) == 0x02)) // MRET
 				{
-					if ((err = execute_mret(inst, core, plat)))
+					if ((err = execute_mret(inst, core,
+								plat)))
 						return err;
 
 				} else {
 					switch (csrno) {
 					case 0:
-						if (core->cur_privilege == Machine) {
-							handle_exception(core, E_M_EnvCall, core->pc);
+						if (core->cur_privilege ==
+						    Machine) {
+							handle_exception(
+								core,
+								E_M_EnvCall,
+								pc);
 							return 0;
 						} else {
-							handle_exception(core, E_U_EnvCall, core->pc);
-							return 0;			
+							handle_exception(
+								core,
+								E_U_EnvCall,
+								pc);
+							return 0;
 						}
 						break; // ECALL; 8 = "Environment call from U-mode"; 11 = "Environment call from M-mode"
 					case 1:
-						handle_exception(core, E_Breakpoint, core->pc);
+						handle_exception(core,
+								 E_Breakpoint,
+								 pc);
 						return 0;
 					default:
-						handle_exception(core, E_Illegal_Instr, inst.bits);
+						handle_exception(
+							core, E_Illegal_Instr,
+							inst.bits);
 						return 0;
 					}
 				}
 			} else {
-				handle_exception(core, E_Illegal_Instr, inst.bits);
+				handle_exception(core, E_Illegal_Instr,
+						 inst.bits);
 				return 0;
 			}
 
@@ -425,13 +441,15 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			uint32_t rs1 = REG((ir >> 15) & 0x1f);
 			uint32_t rs2 = REG((ir >> 20) & 0x1f);
 			uint32_t irmid = (ir >> 27) & 0x1f;
-
+			xlenbits rval = 0;
+			
 			rs1 -= plat->dram->base;
 
 			// We don't implement load/store from UART or CLNT with RV32A here.
 
 			if (rs1 >= plat->dram->size - 3) {
-				handle_exception(core, E_SAMO_Access_Fault, rs1 + plat->dram->base);
+				handle_exception(core, E_SAMO_Access_Fault,
+						 rs1 + plat->dram->base);
 				return 0;
 			} else {
 				rval = dram_lw(dram, rs1);
@@ -445,7 +463,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					break;
 				case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
 					rval = plat->reservation != rs1;
-					write_mem = !rval; // Only write if slot is valid.
+					write_mem =
+						!rval; // Only write if slot is valid.
 					break;
 				case 1:
 					break; //AMOSWAP.W (0b00001)
@@ -478,7 +497,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					rs2 = (rs2 > rval) ? rs2 : rval;
 					break; //AMOMAXU.W (0b11100)
 				default:
-					handle_exception(core, E_Illegal_Instr, inst.bits);
+					handle_exception(core, E_Illegal_Instr,
+							 inst.bits);
 					return 0;
 				}
 				if (write_mem)
