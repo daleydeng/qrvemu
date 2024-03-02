@@ -148,12 +148,11 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 
 			break;
 		}
-		case 0x03: // Load (0b0000011)
+		case 0x03: // Load (0b0000011) TODO
 		{
-			uint32_t rs1 = REG((ir >> 15) & 0x1f);
-			uint32_t imm = ir >> 20;
-			int32_t imm_se = imm | ((imm & 0x800) ? 0xfffff000 : 0);
-			uint32_t rsval = rs1 + imm_se;
+			regtype rs1 = rX(core, inst.I.rs1);
+			xlenbits imm = sign_ext(inst.I.imm, 12);
+			xlenbits rsval = rs1 + imm;
 			xlenbits rval = 0;
 
 			rsval -= plat->dram->base;
@@ -204,10 +203,10 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			wX(core, inst.I.rd, rval);
 			break;
 		}
-		case 0x23: // Store 0b0100011
+		case 0x23: // Store 0b0100011 TODO
 		{
-			uint32_t rs1 = REG((ir >> 15) & 0x1f);
-			uint32_t rs2 = REG((ir >> 20) & 0x1f);
+			regtype rs1 = rX(core, inst.S.rs1);
+			regtype rs2 = rX(core, inst.S.rs2);
 			uint32_t addy = ((ir >> 7) & 0x1f) |
 					((ir & 0xfe000000) >> 20);
 			if (addy & 0x800)
