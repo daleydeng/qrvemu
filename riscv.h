@@ -366,7 +366,7 @@ static inline int16_t dram_lb(struct dram *dram, xlenbits addr)
 	return *(int8_t*)(dram->image + addr);
 }
 
-struct system {
+struct platform {
 	struct rvcore_rv32ima *core;
 
 	bool wfi;
@@ -375,12 +375,12 @@ struct system {
 
 	struct dram *dram;
 
-	xlenbits (*read_csr)(struct system *sys, ast_t inst);
-	void (*write_csr)(struct system *sys, ast_t inst, xlenbits val);
+	xlenbits (*read_csr)(struct platform *plat, ast_t inst);
+	void (*write_csr)(struct platform *plat, ast_t inst, xlenbits val);
 };
 
 
-void dump_sys(struct system *sys);
+void dump_plat(struct platform *plat);
 
 static inline bool check_interrupt(const struct rvcore_rv32ima *core,
 				   enum InterruptType intr)
@@ -403,6 +403,6 @@ static inline void handle_exception(struct rvcore_rv32ima *core,
 	handle_trap(core, mcause, mtval);
 }
 
-xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct system *sys);
-void proc_inst_wfi(ast_t inst, struct rvcore_rv32ima *core, struct system *sys);
+xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+void proc_inst_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 void proc_inst_mret(ast_t inst, struct rvcore_rv32ima *core);

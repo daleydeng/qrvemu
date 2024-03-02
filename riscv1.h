@@ -21,7 +21,7 @@
 
 #include "riscv.h"
 
-int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *state,
+int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *state,
 			uint8_t *image, uint32_t vProcAddress,
 			uint32_t elapsedUs, int count);
 
@@ -38,7 +38,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *state,
 	}
 #endif
 
-int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
+int32_t MiniRV32IMAStep(struct platform *sys, struct rvcore_rv32ima *core,
 			uint8_t *image, uint32_t vProcAddress,
 			uint32_t elapsedUs, int count)
 {
@@ -83,7 +83,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		}
 
 		ir = dram_lw(dram, ofs_pc);
-		ast_t inst = {.bits = ir};
+		ast_t inst = { .bits = ir };
 		int i_rd = inst.rd;
 
 		switch (inst.opcode) {
@@ -122,18 +122,18 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 			xlenbits rs1 = core->regs[inst.I.rs1];
 			write_rd(core, inst.I.rd, core->pc + 4);
 			core->pc = (rs1 + imm_se) & ~1;
-			
+
 			rd_writed = true;
 			break;
 		}
 
 		case 0x63: // Branch (0b1100011)
 		{
-			xlenbits imm = sign_ext((inst.B.imm_1_4 << 1
-				| inst.B.imm_5_10 << 5
-				| inst.B.imm_11 << 11
-				| inst.B.imm_12 << 12), 13);
-			
+			xlenbits imm = sign_ext(
+				(inst.B.imm_1_4 << 1 | inst.B.imm_5_10 << 5 |
+				 inst.B.imm_11 << 11 | inst.B.imm_12 << 12),
+				13);
+
 			int32_t rs1 = core->regs[inst.B.rs1];
 			int32_t rs2 = core->regs[inst.B.rs2];
 
@@ -155,11 +155,13 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				is_jump = (uint32_t)rs1 < (uint32_t)rs2; // bltu
 				break;
 			case 7:
-				is_jump = (uint32_t)rs1 >= (uint32_t)rs2; // bgeu
+				is_jump = (uint32_t)rs1 >=
+					  (uint32_t)rs2; // bgeu
 				break;
 			default:
 				trap = (2 + 1);
-				handle_exception(core, E_Fetch_Addr_Align, core->pc);
+				handle_exception(core, E_Fetch_Addr_Align,
+						 core->pc);
 				return 0;
 			}
 
@@ -234,9 +236,11 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				if (addy >= 0x10000000 && addy < 0x12000000) {
 					// Should be stuff like SYSCON, 8250, CLNT
 					if (addy == 0x11004004) //CLNT
-						*((bits32*)&sys->mtimecmp + 1) = rs2;
+						*((bits32 *)&sys->mtimecmp +
+						  1) = rs2;
 					else if (addy == 0x11004000) //CLNT
-						*((bits32*)&sys->mtimecmp) = rs2;
+						*((bits32 *)&sys->mtimecmp) =
+							rs2;
 					else if (addy ==
 						 0x11100000) //SYSCON (reboot, poweroff, etc.)
 					{
@@ -508,7 +512,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 	// Handle traps and interrupts.
 	if (trap)
 		handle_exception(core, trap - 1,
-			    (trap > 5 && trap <= 8) ? rval : core->pc);
+				 (trap > 5 && trap <= 8) ? rval : core->pc);
 
 	return 0;
 }

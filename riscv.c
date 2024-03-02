@@ -9,25 +9,25 @@ void dram_alloc(struct dram *dram, xlenbits base, size_t size)
     dram->size = size;
     dram->image = calloc(size, 1);
     if (!dram->image) {
-		fprintf(stderr, "Error: could not allocate system image.\n");
+		fprintf(stderr, "Error: could not allocate dram.\n");
 		exit(-4);
 	}
 
 }
 
-void dump_sys(struct system *sys)
+void dump_plat(struct platform *plat)
 {
-	uint32_t pc = sys->core->pc;
-	uint32_t pc_offset = pc - sys->dram->base;
+	uint32_t pc = plat->core->pc;
+	uint32_t pc_offset = pc - plat->dram->base;
 	uint32_t ir = 0;
 
 	printf("PC: %08x ", pc);
-	if (pc_offset >= 0 && pc_offset < sys->dram->size - 3) {
-		ir = *((uint32_t *)(&((uint8_t *)sys->dram->image)[pc_offset]));
+	if (pc_offset >= 0 && pc_offset < plat->dram->size - 3) {
+		ir = *((uint32_t *)(&((uint8_t *)plat->dram->image)[pc_offset]));
 		printf("[0x%08x] ", ir);
 	} else
 		printf("[xxxxxxxxxx] ");
-	uint32_t *regs = sys->core->regs;
+	uint32_t *regs = plat->core->regs;
 	printf("Z:%08x ra:%08x sp:%08x gp:%08x tp:%08x t0:%08x t1:%08x t2:%08x "
 	       "s0:%08x s1:%08x a0:%08x a1:%08x a2:%08x a3:%08x a4:%08x a5:%08x ",
 	       regs[0], regs[1], regs[2], regs[3], regs[4], regs[5], regs[6],
@@ -59,7 +59,7 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 #define WRITE_CSR(no, name) \
 	case no: core->name = write_val; break;
 
-xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct system *sys) 
+xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) 
 {
 	xlenbits rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
@@ -93,8 +93,8 @@ xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct system 
 	//case 0xf13: rval = 0x00000000; break; //mimpid
 	//case 0xf14: rval = 0x00000000; break; //mhartid
 	default:
-		if (sys->read_csr)
-			rval = sys->read_csr(sys, inst);
+		if (plat->read_csr)
+			rval = plat->read_csr(plat, inst);
 		break;
 	}
 
@@ -130,19 +130,19 @@ xlenbits proc_inst_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct system 
 	WRITE_CSR(0x344, mip.bits)
 
 	default:
-		if (sys->write_csr)
-			sys->write_csr(sys, inst, write_val);
+		if (plat->write_csr)
+			plat->write_csr(plat, inst, write_val);
 		break;
 	}
 
 	return rval;
 }
 
-void proc_inst_wfi(ast_t inst, struct rvcore_rv32ima *core, struct system *sys)
+void proc_inst_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
 	assert(inst.priv_I.imm == 0x105);
 	core->mstatus.MIE = true;
-	sys->wfi = true;
+	plat->wfi = true;
 }
 
 void proc_inst_mret(ast_t inst, struct rvcore_rv32ima *core)
@@ -161,7 +161,7 @@ void proc_inst_mret(ast_t inst, struct rvcore_rv32ima *core)
 	core->mstatus.MPIE = true;
 }
 
-// void proc_inst_priv(struct system *sys, struct inst inst)
+// void proc_inst_priv(struct plattem *plat, struct inst inst)
 // {
 
 // 	} else if (((csrno & 0xff) == 0x02)) // MRET

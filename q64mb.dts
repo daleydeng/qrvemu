@@ -83,8 +83,9 @@
 		};
 
 		syscon@11100000 {
-			phandle = <0x04>;
 			reg = <0x00 0x11100000 0x00 0x1000>;
+			
+			phandle = <0x04>;
 			compatible = "syscon";
 		};
 	};

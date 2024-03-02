@@ -39,13 +39,13 @@ static int ReadKBByte();
 #include "riscv1.h"
 #include "utils.h"
 
-static xlenbits read_other_csr(struct system *sys, ast_t inst);
-static void write_other_csr(struct system *sys, ast_t inst, xlenbits val);
+static xlenbits read_other_csr(struct platform *plat, ast_t inst);
+static void write_other_csr(struct platform *plat, ast_t inst, xlenbits val);
 
 size_t RAM_BASE = 0x80000000;
 size_t RAM_SIZE = 64 * 1024 * 1024;
 
-struct system *sys = NULL;
+struct platform *plat = NULL;
 
 int main(int argc, char **argv)
 {
@@ -150,11 +150,11 @@ int main(int argc, char **argv)
 	struct dram *dram = calloc(1, sizeof(struct dram));
 	dram_alloc(dram, RAM_BASE, RAM_SIZE);
 
-	sys = calloc(1, sizeof(struct system));
-	assert(sys);
-	sys->dram = dram;
-	sys->read_csr = read_other_csr;
-	sys->write_csr = write_other_csr;
+	plat = calloc(1, sizeof(struct platform));
+	assert(plat);
+	plat->dram = dram;
+	plat->read_csr = read_other_csr;
+	plat->write_csr = write_other_csr;
 
 	long flen = 0;
 
@@ -179,7 +179,7 @@ restart:
 	core->regs[R_a1] = RAM_BASE + RAM_SIZE - dtb_len;
 	core->cur_privilege = Machine;
 
-	sys->core = core;
+	plat->core = core;
 
 	// Image is loaded.
 	uint64_t rt;
@@ -196,10 +196,10 @@ restart:
 		lastTime += elapsedUs;
 
 		if (single_step)
-			dump_sys(sys);
+			dump_plat(plat);
 
 		int ret = MiniRV32IMAStep(
-			sys,
+			plat,
 			core, dram->image, 0, elapsedUs,
 			instrs_per_flip); // Execute upto 1024 cycles before breaking out.
 		switch (ret) {
@@ -224,7 +224,7 @@ restart:
 		}
 	}
 
-	dump_sys(sys);
+	dump_plat(plat);
 }
 
 //////////////////////////////////////////////////////////////////////////
@@ -239,7 +239,7 @@ restart:
 
 static void CtrlC()
 {
-	dump_sys(sys);
+	dump_plat(plat);
 	exit(0);
 }
 
@@ -338,11 +338,11 @@ static uint32_t HandleControlLoad(uint32_t addy)
 	return 0;
 }
 
-static void write_other_csr(struct system *sys, ast_t inst, xlenbits val)
+static void write_other_csr(struct platform *plat, ast_t inst, xlenbits val)
 {
 	xlenbits ptrstart, ptrend;
-	struct dram *dram = sys->dram;
-	
+	struct dram *dram = plat->dram;
+
 	switch (inst.Zicsr.csr) {
 	case 0x136:
 		printf("%d", val);
@@ -377,7 +377,7 @@ static void write_other_csr(struct system *sys, ast_t inst, xlenbits val)
 	}
 }
 
-static xlenbits read_other_csr(struct system *sys, ast_t inst)
+static xlenbits read_other_csr(struct platform *plat, ast_t inst)
 {
 	if (inst.Zicsr.csr == 0x140) {
 		if (!IsKBHit())
