@@ -175,19 +175,19 @@ restart:
 	int instrs_per_flip = single_step ? 1 : 1024;
 	for (rt = 0; rt < instct + 1 || instct < 0; rt += instrs_per_flip) {
 		uint64_t *this_ccount = &core->mcycle.v;
-		uint32_t elapsedUs = 0;
+		uint64_t elapsed_us = 0;
 		if (fixed_update)
-			elapsedUs = *this_ccount / time_divisor - lastTime;
+			elapsed_us = *this_ccount / time_divisor - lastTime;
 		else
-			elapsedUs = GetTimeMicroseconds() / time_divisor - lastTime;
-		lastTime += elapsedUs;
+			elapsed_us = GetTimeMicroseconds() / time_divisor - lastTime;
+		lastTime += elapsed_us;
 
 		if (single_step)
 			dump_plat(plat);
-
-		int ret = MiniRV32IMAStep(
+		
+		int ret = step_rv32ima(
 			plat,
-			core, dram->image, 0, elapsedUs,
+			elapsed_us,
 			instrs_per_flip); // Execute upto 1024 cycles before breaking out.
 		switch (ret) {
 		case 0:
@@ -213,8 +213,6 @@ restart:
 
 	dump_plat(plat);
 }
-
-
 
 static void CtrlC()
 {

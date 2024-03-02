@@ -458,8 +458,5 @@ int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 int execute_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 
-
-int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
-		    uint8_t *image, uint32_t vProcAddress, uint32_t elapsedUs,
-		    int count);
+int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch);
 #endif

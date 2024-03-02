@@ -5,14 +5,13 @@
 
 void dram_alloc(struct dram *dram, xlenbits base, size_t size)
 {
-    dram->base = base;
-    dram->size = size;
-    dram->image = calloc(size, 1);
-    if (!dram->image) {
+	dram->base = base;
+	dram->size = size;
+	dram->image = calloc(size, 1);
+	if (!dram->image) {
 		fprintf(stderr, "Error: could not allocate dram.\n");
 		exit(-4);
 	}
-
 }
 
 void dump_plat(struct platform *plat)
@@ -56,12 +55,17 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 	tick_pc(core);
 }
 
-#define READ_CSR(no, name) \
-	case no: rval = core->name; break;
-#define WRITE_CSR(no, name) \
-	case no: core->name = write_val; break;
+#define READ_CSR(no, name)         \
+	case no:                   \
+		rval = core->name; \
+		break;
+#define WRITE_CSR(no, name)             \
+	case no:                        \
+		core->name = write_val; \
+		break;
 
-int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) 
+int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
+		  struct platform *plat)
 {
 	xlenbits rval = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
@@ -72,22 +76,30 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat
 	// https://raw.githubusercontent.com/riscv/virtual-memory/main/specs/663-Svpbmt.pdf
 	// Generally, support for Zicsr
 	switch (inst.Zicsr.csr) {
-		case 0xC00: rval = (xlenbits) core->mcycle.v; break;
-		case 0xC01: rval = (xlenbits) core->mtime.v; break;
-		case 0xC80: rval = core->mcycle.high; break;
-		case 0xC81: rval = core->mtime.high;break;
+	case 0xC00:
+		rval = (xlenbits)core->mcycle.v;
+		break;
+	case 0xC01:
+		rval = (xlenbits)core->mtime.v;
+		break;
+	case 0xC80:
+		rval = core->mcycle.high;
+		break;
+	case 0xC81:
+		rval = core->mtime.high;
+		break;
 
-	READ_CSR(0xf11, mvendorid)
-	READ_CSR(0x300, mstatus.bits)
-	READ_CSR(0x301, misa.bits)
-	READ_CSR(0x304, mie.bits)
-	READ_CSR(0x305, mtvec.bits)
+		READ_CSR(0xf11, mvendorid)
+		READ_CSR(0x300, mstatus.bits)
+		READ_CSR(0x301, misa.bits)
+		READ_CSR(0x304, mie.bits)
+		READ_CSR(0x305, mtvec.bits)
 
-	READ_CSR(0x340, mscratch)
-	READ_CSR(0x341, mepc)
-	READ_CSR(0x342, mcause.bits)
-	READ_CSR(0x343, mtval)
-	READ_CSR(0x344, mip.bits)
+		READ_CSR(0x340, mscratch)
+		READ_CSR(0x341, mepc)
+		READ_CSR(0x342, mcause.bits)
+		READ_CSR(0x343, mtval)
+		READ_CSR(0x344, mip.bits)
 
 	//case 0x3B0: rval = 0; break; //pmpaddr0
 	//case 0x3a0: rval = 0; break; //pmpcfg0
@@ -108,7 +120,7 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat
 		write_val = rval | rs1;
 		break; //CSRRS
 	case 3:
-		write_val = rval &~ rs1;
+		write_val = rval & ~rs1;
 		break; //CSRRC
 	case 5:
 		write_val = uimm;
@@ -117,19 +129,19 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat
 		write_val = rval | uimm;
 		break; //CSRRSI
 	case 7:
-		write_val = rval &~ uimm;
+		write_val = rval & ~uimm;
 		break; //CSRRCI
 	}
 
 	switch (inst.Zicsr.csr) {
-	WRITE_CSR(0x300, mstatus.bits)
-	WRITE_CSR(0x304, mie.bits)
-	WRITE_CSR(0x305, mtvec.bits)
-	WRITE_CSR(0x340, mscratch)
-	WRITE_CSR(0x341, mepc)
-	WRITE_CSR(0x342, mcause.bits)
-	WRITE_CSR(0x343, mtval)
-	WRITE_CSR(0x344, mip.bits)
+		WRITE_CSR(0x300, mstatus.bits)
+		WRITE_CSR(0x304, mie.bits)
+		WRITE_CSR(0x305, mtvec.bits)
+		WRITE_CSR(0x340, mscratch)
+		WRITE_CSR(0x341, mepc)
+		WRITE_CSR(0x342, mcause.bits)
+		WRITE_CSR(0x343, mtval)
+		WRITE_CSR(0x344, mip.bits)
 
 	default:
 		if (plat->write_csr)
@@ -159,7 +171,8 @@ int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 	// MIE=MPIE, and MPIE=1. Lastly, MRET sets the privilege mode as previously determined, and
 	// sets pc = mepc.
 
-	core->cur_privilege = core->mstatus.MPP;;
+	core->cur_privilege = core->mstatus.MPP;
+	;
 	// clear_bit2(&core->mstatus, MSTATUS_MPP); ??? dont work here
 	core->mstatus.MIE = core->mstatus.MPIE;
 	core->mstatus.MPIE = true;
@@ -268,13 +281,13 @@ int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 // 	}
 // }
 
-int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
-		    uint8_t *image, uint32_t vProcAddress, uint32_t elapsedUs,
-		    int count)
+int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 {
 	int err = 0;
+	struct rvcore_rv32ima *core = plat->core;
 	struct dram *dram = plat->dram;
-	core->mtime.v += elapsedUs;
+	core->mtime.v += elapsed_us;
+
 	// Handle Timer interrupt.
 	if (plat->mtimecmp.v && core->mtime.v >= plat->mtimecmp.v) {
 		plat->wfi = false;
@@ -291,7 +304,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		return 0;
 	}
 
-	for (int icount = 0; icount < count; icount++) {
+	for (int icount = 0; icount < inst_batch; icount++) {
 		core->mcycle.v += 1;
 		xlenbits pc = core->pc;
 		xlenbits ofs_pc = pc - plat->dram->base;
@@ -402,7 +415,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 						rval = core->mtime.low;
 					else {
 						if (plat->load)
-							rval = plat->load(plat, rsval);
+							rval = plat->load(
+								plat, rsval);
 					}
 				} else {
 					handle_exception(core,
@@ -466,7 +480,9 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 
 					} else {
 						if (plat->store) {
-							if ((err = plat->store(plat, addy, rs2)))
+							if ((err = plat->store(
+								     plat, addy,
+								     rs2)))
 								return err;
 						}
 					}
@@ -651,7 +667,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 								pc);
 							return 0;
 						}
-						break; // ECALL; 8 = "Environment call from U-mode"; 11 = "Environment call from M-mode"
 					case 1:
 						handle_exception(
 							core, E_Breakpoint, pc);
@@ -681,66 +696,64 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			rs1 -= plat->dram->base;
 
 			// We don't implement load/store from UART or CLNT with RV32A here.
-
 			if (rs1 >= plat->dram->size - 3) {
 				handle_exception(core, E_SAMO_Access_Fault,
 						 rs1 + plat->dram->base);
 				return 0;
-			} else {
-				rval = dram_lw(dram, rs1);
-
-				// Referenced a little bit of https://github.com/franzflasch/riscv_em/blob/master/src/core/core.c
-				uint32_t write_mem = 1;
-				switch (irmid) {
-				case 2: //LR.W (0b00010)
-					write_mem = 0;
-					plat->reservation = rs1;
-					break;
-				case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
-					rval = plat->reservation != rs1;
-					write_mem =
-						!rval; // Only write if slot is valid.
-					break;
-				case 1:
-					break; //AMOSWAP.W (0b00001)
-				case 0:
-					rs2 += rval;
-					break; //AMOADD.W (0b00000)
-				case 4:
-					rs2 ^= rval;
-					break; //AMOXOR.W (0b00100)
-				case 12:
-					rs2 &= rval;
-					break; //AMOAND.W (0b01100)
-				case 8:
-					rs2 |= rval;
-					break; //AMOOR.W (0b01000)
-				case 16:
-					rs2 = ((int32_t)rs2 < (int32_t)rval) ?
-						      rs2 :
-						      rval;
-					break; //AMOMIN.W (0b10000)
-				case 20:
-					rs2 = ((int32_t)rs2 > (int32_t)rval) ?
-						      rs2 :
-						      rval;
-					break; //AMOMAX.W (0b10100)
-				case 24:
-					rs2 = (rs2 < rval) ? rs2 : rval;
-					break; //AMOMINU.W (0b11000)
-				case 28:
-					rs2 = (rs2 > rval) ? rs2 : rval;
-					break; //AMOMAXU.W (0b11100)
-				default:
-					handle_exception(core, E_Illegal_Instr,
-							 inst.bits);
-					return 0;
-				}
-				if (write_mem)
-					dram_sw(dram, rs1, rs2);
-
-				wX(core, inst.R.rd, rval);
 			}
+
+			rval = dram_lw(dram, rs1);
+
+			// Referenced a little bit of https://github.com/franzflasch/riscv_em/blob/master/src/core/core.c
+			uint32_t write_mem = 1;
+			switch (irmid) {
+			case 2: //LR.W (0b00010)
+				write_mem = 0;
+				plat->reservation = rs1;
+				break;
+			case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
+				rval = plat->reservation != rs1;
+				write_mem =
+					!rval; // Only write if slot is valid.
+				break;
+			case 1:
+				break; //AMOSWAP.W (0b00001)
+			case 0:
+				rs2 += rval;
+				break; //AMOADD.W (0b00000)
+			case 4:
+				rs2 ^= rval;
+				break; //AMOXOR.W (0b00100)
+			case 12:
+				rs2 &= rval;
+				break; //AMOAND.W (0b01100)
+			case 8:
+				rs2 |= rval;
+				break; //AMOOR.W (0b01000)
+			case 16:
+				rs2 = ((int32_t)rs2 < (int32_t)rval) ? rs2 :
+								       rval;
+				break; //AMOMIN.W (0b10000)
+			case 20:
+				rs2 = ((int32_t)rs2 > (int32_t)rval) ? rs2 :
+								       rval;
+				break; //AMOMAX.W (0b10100)
+			case 24:
+				rs2 = (rs2 < rval) ? rs2 : rval;
+				break; //AMOMINU.W (0b11000)
+			case 28:
+				rs2 = (rs2 > rval) ? rs2 : rval;
+				break; //AMOMAXU.W (0b11100)
+			default:
+				handle_exception(core, E_Illegal_Instr,
+						 inst.bits);
+				return 0;
+			}
+
+			if (write_mem)
+				dram_sw(dram, rs1, rs2);
+
+			wX(core, inst.R.rd, rval);
 			break;
 		}
 		default:
