@@ -84,12 +84,12 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 		xlenbits ofs_pc = core->pc - sys->ram_base;
 
 		if (ofs_pc >= sys->ram_size) {
-			handle_trap(core, EXC_INST_ACCESS_FAULT, core->pc);
+			handle_trap(core, E_Fetch_Access_Fault, core->pc);
 			return 0;
 		}
 
 		if (ofs_pc & 0x3) {
-			handle_trap(core, EXC_INST_ADDR_MISALIGNED, core->pc);
+			handle_trap(core, E_Fetch_Addr_Align, core->pc);
 			return 0;
 		}
 
@@ -170,7 +170,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				break;
 			default:
 				trap = (2 + 1);
-				handle_trap(core, EXC_INST_ADDR_MISALIGNED, core->pc);
+				handle_trap(core, E_Fetch_Addr_Align, core->pc);
 				return 0;
 			}
 

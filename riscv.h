@@ -34,19 +34,26 @@ static inline void copy_bit2(xlenbits *reg, int b, int val)
 
 enum trap_type { TRAP_NONE, INTERRUPT, EXCEPTION };
 
-enum exception_type {
-	EXC_NONE = -1,
-	EXC_INST_ADDR_MISALIGNED = 0,
-	EXC_INST_ACCESS_FAULT = 1,
-	EXC_ILLEGAL_INST = 2,
-	EXC_BREAKPOINT = 3,
-	EXC_LOAD_ADDR_MISALIGNED = 4,
-	EXC_LOAD_ACCESS_FAULT = 5,
-	EXC_STORE_ADDR_MISALIGNED = 6,
-	EXC_STORE_ACCESS_FAULT = 7,
-	EXC_ECALL_FROM_U_MODE = 8,
-	EXC_ECALL_FROM_S_MODE = 9,
-	EXC_ECALL_FROM_M_MODE = 11,
+enum ExceptionType {
+	E_Fetch_Addr_Align,
+	E_Fetch_Access_Fault,
+	E_Illegal_Instr,
+	E_Breakpoint,
+	E_Load_Addr_Align,
+	E_Load_Access_Fault,
+	E_SAMO_Addr_Align,
+	E_SAMO_Access_Fault,
+	E_U_EnvCall,
+	E_S_EnvCall,
+	E_Reserved_10,
+	E_M_EnvCall,
+	E_Fetch_Page_Fault,
+	E_Load_Page_Fault,
+	E_Reserved_14,
+	E_SAMO_Page_Fault,
+
+	/* extensions */
+	E_Extension,
 };
 
 typedef struct {
