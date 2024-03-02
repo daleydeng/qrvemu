@@ -120,7 +120,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			is_jump = true;
 			xlenbits imm_se = sign_ext(inst.I.imm, 12);
 			// NOTICE, rs1 may override with rd, save rs1 first
-			xlenbits rs1 = core->regs[inst.I.rs1];
+			xlenbits rs1 = rX(core, inst.I.rs1);
 			wX(core, inst.I.rd, core->pc + 4);
 			core->pc = (rs1 + imm_se) & ~1;
 
@@ -135,8 +135,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				 inst.B.imm_11 << 11 | inst.B.imm_12 << 12),
 				13);
 
-			int32_t rs1 = core->regs[inst.B.rs1];
-			int32_t rs2 = core->regs[inst.B.rs2];
+			int32_t rs1 = rX(core, inst.B.rs1);
+			int32_t rs2 = rX(core, inst.B.rs2);
 
 			switch (inst.B.funct3) {
 			// BEQ, BNE, BLT, BGE, BLTU, BGEU
