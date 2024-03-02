@@ -60,7 +60,6 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 	uint32_t rval = 0;
 
 	for (int icount = 0; icount < count; icount++) {
-		bool is_jump = false;
 		bool rd_writed = false;
 		xlenbits ir = 0;
 		rval = 0;
@@ -81,43 +80,43 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		ir = dram_lw(dram, ofs_pc);
 		ast_t inst = { .bits = ir };
 		int i_rd = inst.rd;
+		core->next_pc = core->pc + 4;
 
 		switch (inst.opcode) {
 		case 0x37: // LUI (0b0110111)
 			wX(core, inst.U.rd, inst.U.imm << 12);
+
 			rd_writed = true;
 			break;
 
 		case 0x17: // AUIPC (0b0010111)
 			wX(core, inst.U.rd,
 				 core->pc + (inst.U.imm << 12));
+
 			rd_writed = true;
 			break;
 
 		case 0x6F: // JAL (0b1101111)
 		{
-			is_jump = true;
 			xlenbits rel_addr =
 				(inst.J.imm_1_10 << 1 | inst.J.imm_11 << 11 |
 				 inst.J.imm_12_19 << 12 | inst.J.imm_20 << 20);
 			rel_addr = sign_ext(rel_addr, 21);
 
 			wX(core, inst.J.rd, core->pc + 4);
-			core->pc += rel_addr;
+			core->next_pc = core->pc + rel_addr;
 
 			rd_writed = true;
-
 			break;
 		}
 
 		case 0x67: // JALR (0b1100111)
-		{
-			is_jump = true;
+		{\
 			xlenbits imm_se = sign_ext(inst.I.imm, 12);
 			// NOTICE, rs1 may override with rd, save rs1 first
 			xlenbits rs1 = rX(core, inst.I.rs1);
 			wX(core, inst.I.rd, core->pc + 4);
-			core->pc = (rs1 + imm_se) & ~1;
+			core->next_pc = (rs1 + imm_se) & ~1;
 
 			rd_writed = true;
 			break;
@@ -133,25 +132,26 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 			int32_t rs1 = rX(core, inst.B.rs1);
 			int32_t rs2 = rX(core, inst.B.rs2);
 
+			bool jumped = false;
 			switch (inst.B.funct3) {
 			// BEQ, BNE, BLT, BGE, BLTU, BGEU
 			case 0:
-				is_jump = rs1 == rs2; // beq
+				jumped = rs1 == rs2; // beq
 				break;
 			case 1:
-				is_jump = rs1 != rs2; // bne
+				jumped = rs1 != rs2; // bne
 				break;
 			case 4:
-				is_jump = rs1 < rs2; // blt
+				jumped = rs1 < rs2; // blt
 				break;
 			case 5:
-				is_jump = rs1 >= rs2; // bge
+				jumped = rs1 >= rs2; // bge
 				break;
 			case 6:
-				is_jump = (uint32_t)rs1 < (uint32_t)rs2; // bltu
+				jumped = (uint32_t)rs1 < (uint32_t)rs2; // bltu
 				break;
 			case 7:
-				is_jump = (uint32_t)rs1 >=
+				jumped = (uint32_t)rs1 >=
 					  (uint32_t)rs2; // bgeu
 				break;
 			default:
@@ -160,8 +160,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				return 0;
 			}
 
-			if (is_jump)
-				core->pc += imm;
+			if (jumped)
+				core->next_pc = core->pc + imm;
 
 			rd_writed = true;
 			break;
@@ -218,7 +218,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		}
 		case 0x23: // Store 0b0100011
 		{
-			rd_writed = true;
+
 
 			uint32_t rs1 = REG((ir >> 15) & 0x1f);
 			uint32_t rs2 = REG((ir >> 20) & 0x1f);
@@ -242,7 +242,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					else if (addy ==
 						 0x11100000) //SYSCON (reboot, poweroff, etc.)
 					{
-						SETCSR(pc, core->pc + 4);
+						tick_pc(core);
 						return rs2; // NOTE: PC will be PC of Syscon.
 					} else
 						MINIRV32_HANDLE_MEM_STORE_CONTROL(
@@ -268,6 +268,8 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					return 0;
 				}
 			}
+
+			rd_writed = true;
 			break;
 		}
 		case 0x13: // Op-immediate 0b0010011
@@ -376,6 +378,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					break;
 				}
 			}
+
 			break;
 		}
 		case 0x0f: // 0b0001111
@@ -398,15 +401,13 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 					if ((err = execute_wfi(inst, core, plat)))
 						return err;
 					
-					core->pc = core->pc + 4;
+					tick_pc(core);
 					return 1;
 
 				} else if (((csrno & 0xff) == 0x02)) // MRET
 				{
 					if ((err = execute_mret(inst, core, plat)))
 						return err;
-
-					core->pc = core->mepc - 4;
 
 				} else {
 					i_rd = 0;
@@ -432,7 +433,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 				handle_exception(core, E_Illegal_Instr, inst.bits);
 				return 0;
 			}
-				
+
 			break;
 		}
 		case 0x2f: // RV32A (0b00101111)
@@ -512,8 +513,7 @@ int MiniRV32IMAStep(struct platform *plat, struct rvcore_rv32ima *core,
 		if (!rd_writed)
 			wX(core, i_rd, rval);
 
-		if (!is_jump)
-			core->pc += 4;
+		tick_pc(core);
 	}
 
 	return 0;

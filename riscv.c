@@ -163,6 +163,7 @@ int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 	// clear_bit2(&core->mstatus, MSTATUS_MPP); ??? dont work here
 	core->mstatus.MIE = core->mstatus.MPIE;
 	core->mstatus.MPIE = true;
+	core->next_pc = core->mepc;
 	return 0;
 }
 
