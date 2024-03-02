@@ -19,17 +19,6 @@
 #define MINIRV32_HANDLE_MEM_LOAD_CONTROL(...) ;
 #endif
 
-#ifndef MINIRV32_CUSTOM_MEMORY_BUS
-#define MINIRV32_STORE4(ofs, val) *(uint32_t *)(image + ofs) = val
-#define MINIRV32_STORE2(ofs, val) *(uint16_t *)(image + ofs) = val
-#define MINIRV32_STORE1(ofs, val) *(uint8_t *)(image + ofs) = val
-#define MINIRV32_LOAD4(ofs) *(uint32_t *)(image + ofs)
-#define MINIRV32_LOAD2(ofs) *(uint16_t *)(image + ofs)
-#define MINIRV32_LOAD1(ofs) *(uint8_t *)(image + ofs)
-#define MINIRV32_LOAD2_SIGNED(ofs) *(int16_t *)(image + ofs)
-#define MINIRV32_LOAD1_SIGNED(ofs) *(int8_t *)(image + ofs)
-#endif
-
 #include "riscv.h"
 
 int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *state,
@@ -53,6 +42,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 			uint8_t *image, uint32_t vProcAddress,
 			uint32_t elapsedUs, int count)
 {
+	struct dram *dram = sys->dram;
 	core->mtime.v += elapsedUs;
 	// Handle Timer interrupt.
 	if (sys->mtimecmp.v && core->mtime.v >= sys->mtimecmp.v) {
@@ -92,7 +82,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 			return 0;
 		}
 
-		ir = MINIRV32_LOAD4(ofs_pc);
+		ir = dram_lw(dram, ofs_pc);
 		ast_t inst = {.bits = ir};
 		int i_rd = inst.rd;
 
@@ -208,19 +198,19 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				switch ((ir >> 12) & 0x7) {
 				//LB, LH, LW, LBU, LHU
 				case 0:
-					rval = MINIRV32_LOAD1_SIGNED(rsval);
+					rval = dram_lb(dram, rsval);
 					break;
 				case 1:
-					rval = MINIRV32_LOAD2_SIGNED(rsval);
+					rval = dram_lh(dram, rsval);
 					break;
 				case 2:
-					rval = MINIRV32_LOAD4(rsval);
+					rval = dram_lw(dram, rsval);
 					break;
 				case 4:
-					rval = MINIRV32_LOAD1(rsval);
+					rval = dram_lbu(dram, rsval);
 					break;
 				case 5:
-					rval = MINIRV32_LOAD2(rsval);
+					rval = dram_lhu(dram, rsval);
 					break;
 				default:
 					trap = (2 + 1);
@@ -263,13 +253,13 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				switch ((ir >> 12) & 0x7) {
 				//SB, SH, SW
 				case 0:
-					MINIRV32_STORE1(addy, rs2);
+					dram_sb(dram, addy, rs2);
 					break;
 				case 1:
-					MINIRV32_STORE2(addy, rs2);
+					dram_sh(dram, addy, rs2);
 					break;
 				case 2:
-					MINIRV32_STORE4(addy, rs2);
+					dram_sw(dram, addy, rs2);
 					break;
 				default:
 					trap = (2 + 1);
@@ -444,7 +434,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 				trap = (7 + 1); //Store/AMO access fault
 				rval = rs1 + sys->dram->base;
 			} else {
-				rval = MINIRV32_LOAD4(rs1);
+				rval = dram_lw(dram, rs1);
 
 				// Referenced a little bit of https://github.com/franzflasch/riscv_em/blob/master/src/core/core.c
 				uint32_t dowrite = 1;
@@ -494,7 +484,7 @@ int32_t MiniRV32IMAStep(struct system *sys, struct rvcore_rv32ima *core,
 					break; //Not supported.
 				}
 				if (dowrite)
-					MINIRV32_STORE4(rs1, rs2);
+					dram_sw(dram, rs1, rs2);
 			}
 			break;
 		}

@@ -333,6 +333,39 @@ static inline xlenbits dram_end(struct dram *dram)
 
 void dram_alloc(struct dram *dram, xlenbits base, size_t size);
 
+static inline void dram_sw(struct dram *dram, xlenbits addr, uint32_t val)
+{
+	*(uint32_t*)(dram->image + addr) = val;
+}
+static inline void dram_sh(struct dram *dram, xlenbits addr, uint16_t val)
+{
+	*(uint16_t*)(dram->image + addr) = val;
+}
+static inline void dram_sb(struct dram *dram, xlenbits addr, uint8_t val)
+{
+	*(uint8_t*)(dram->image + addr) = val;
+}
+static inline uint32_t dram_lw(struct dram *dram, xlenbits addr)
+{
+	return *(uint32_t*)(dram->image + addr);
+}
+static inline uint16_t dram_lhu(struct dram *dram, xlenbits addr)
+{
+	return *(uint16_t*)(dram->image + addr);
+}
+static inline uint16_t dram_lbu(struct dram *dram, xlenbits addr)
+{
+	return *(uint8_t*)(dram->image + addr);
+}
+static inline int16_t dram_lh(struct dram *dram, xlenbits addr)
+{
+	return *(int16_t*)(dram->image + addr);
+}
+static inline int16_t dram_lb(struct dram *dram, xlenbits addr)
+{
+	return *(int8_t*)(dram->image + addr);
+}
+
 struct system {
 	struct rvcore_rv32ima *core;
 
