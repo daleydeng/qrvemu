@@ -402,7 +402,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			xlenbits rval = 0;
 
 			if (dram_is_in(dram, vaddr)) {
-				switch ((ir >> 12) & 0x7) {
+				switch (inst.I.funct3) {
 				//LB, LH, LW, LBU, LHU
 				case 0:
 					rval = dram_lb(dram, vaddr);
@@ -452,45 +452,11 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		{
 			regtype rs1 = rX(core, inst.S.rs1);
 			regtype rs2 = rX(core, inst.S.rs2);
-			uint32_t addy = ((ir >> 7) & 0x1f) |
-					((ir & 0xfe000000) >> 20);
-			if (addy & 0x800)
-				addy |= 0xfffff000;
-			addy += rs1 - dram->base;
-			xlenbits vaddr = addy + dram->base;
+			xlenbits imm = sign_ext(inst.S.imm_0_4 | inst.S.imm_5_11 << 5, 12);
+			xlenbits vaddr = rs1 + imm;
 
-			if (addy >= dram->size - 3) {
-				addy += dram->base;
-				if (addy >= 0x10000000 && addy < 0x12000000) {
-					// Should be stuff like SYSCON, 8250, CLNT
-					if (addy == 0x11004004) //CLNT
-						*((bits32 *)&plat->mtimecmp +
-						  1) = rs2;
-					else if (addy == 0x11004000) //CLNT
-						*((bits32 *)&plat->mtimecmp) =
-							rs2;
-					else if (addy ==
-						 0x11100000) //SYSCON (reboot, poweroff, etc.)
-					{
-						tick_pc(core);
-						return rs2; // NOTE: PC will be PC of Syscon.
-
-					} else {
-						if (plat->store) {
-							if ((err = plat->store(
-								     plat, addy,
-								     rs2)))
-								return err;
-						}
-					}
-				} else {
-					handle_exception(core,
-							 E_SAMO_Access_Fault,
-							 addy);
-					return 0;
-				}
-			} else {
-				switch ((ir >> 12) & 0x7) {
+			if (dram_is_in(dram, vaddr)) {
+				switch (inst.S.funct3) {
 				//SB, SH, SW
 				case 0:
 					dram_sb(dram, vaddr, rs2);
@@ -506,6 +472,29 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 							 inst.bits);
 					return 0;
 				}
+				break;
+			}
+
+			if (vaddr >= 0x10000000 && vaddr < 0x12000000) {
+				// Should be stuff like SYSCON, 8250, CLNT
+				if (vaddr == 0x11004004) //CLNT
+					*((bits32 *)&plat->mtimecmp + 1) = rs2;
+				else if (vaddr == 0x11004000) //CLNT
+					*((bits32 *)&plat->mtimecmp) = rs2;
+				else if (vaddr == 0x11100000) //SYSCON (reboot, poweroff, etc.)
+				{
+					tick_pc(core);
+					return rs2; // NOTE: PC will be PC of Syscon.
+
+				} else {
+					if (plat->store) {
+						if ((err = plat->store(plat, vaddr, rs2)))
+							return err;
+					}
+				}
+			} else {
+				handle_exception(core, E_SAMO_Access_Fault, vaddr);
+				return 0;
 			}
 			break;
 		}
