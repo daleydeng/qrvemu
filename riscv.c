@@ -64,7 +64,7 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 		core->name = write_val; \
 		break;
 
-int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
+enum ExeResult execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
 		  struct platform *plat)
 {
 	xlenbits rd = 0;
@@ -150,18 +150,18 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
 	}
 
 	wX(core, inst.Zicsr.rd, rd);
-	return 0;
+	return EXE_OK;
 }
 
-int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
+enum ExeResult execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
 	assert(inst.I.imm == 0x105);
 	core->mstatus.MIE = true;
 	plat->wfi = true;
-	return 0;
+	return EXE_OK;
 }
 
-int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
+enum ExeResult execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
 	assert(inst.I.imm == 0x302); // 0b0011 0000 0010
 	// refer Volume II: RISC-V Privileged Architectures V20211203 manual 8.6.4 Trap Return
@@ -177,10 +177,10 @@ int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 	core->mstatus.MIE = core->mstatus.MPIE;
 	core->mstatus.MPIE = true;
 	core->next_pc = core->mepc;
-	return 0;
+	return EXE_OK;
 }
 
-int execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) // adapt to XLEN
+enum ExeResult execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) // adapt to XLEN
 {
 	regtype rs1 = rX(core, inst.R.rs1);
 	regtype rs2 = rX(core, inst.R.rs2);
@@ -230,16 +230,16 @@ int execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 		break;
 	}
 	wX(core, inst.R.rd, rd);
-	return 0;
+	return EXE_OK;
 }
 
-int execute_aext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
+enum ExeResult execute_aext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
 
-	return 0;
+	return EXE_OK;
 }
 
-int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
+enum ExeResult step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 {
 	int err = 0;
 	struct rvcore_rv32ima *core = plat->core;
@@ -255,11 +255,11 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 	}
 
 	if (plat->wfi)
-		return 1;
+		return EXE_WFI;
 
 	if (check_interrupt(core, I_M_Timer)) {
 		handle_interrupt(core, I_M_Timer);
-		return 0;
+		return EXE_INTR;
 	}
 
 	for (int icount = 0; icount < inst_batch; icount++) {
@@ -268,12 +268,12 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 
 		if (!dram_is_in(dram, pc)) {
 			handle_exception(core, E_Fetch_Access_Fault, pc);
-			return 0;
+			return EXE_EXC;
 		}
 
 		if (pc & 0x3) {
 			handle_exception(core, E_Fetch_Addr_Align, pc);
-			return 0;
+			return EXE_EXC;
 		}
 
 		xlenbits ir = dram_lw(dram, pc);
@@ -350,7 +350,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				break;
 			default:
 				handle_exception(core, E_Illegal_Instr, pc);
-				return 0;
+				return EXE_EXC;
 			}
 
 			if (jumped)
@@ -386,7 +386,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				default:
 					handle_exception(core, E_Illegal_Instr,
 							 inst.bits);
-					return 0;
+					return EXE_EXC;
 				}
 				wX(core, inst.I.rd, rd);
 				break;
@@ -407,7 +407,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			} else {
 				handle_exception(core, E_Load_Access_Fault,
 						 vaddr);
-				return 0;
+				return EXE_EXC;
 			}
 			wX(core, inst.I.rd, rd);
 			break;
@@ -435,7 +435,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				default:
 					handle_exception(core, E_Illegal_Instr,
 							 inst.bits);
-					return 0;
+					return EXE_EXC;
 				}
 				break;
 			}
@@ -462,7 +462,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			} else {
 				handle_exception(core, E_SAMO_Access_Fault,
 						 vaddr);
-				return 0;
+				return EXE_EXC;
 			}
 			break;
 		}
@@ -557,7 +557,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			} else {
 				handle_exception(core, E_Illegal_Instr,
 						 inst.bits);
-				return 0;
+				return EXE_EXC;
 			}
 			break;
 		}
@@ -574,12 +574,12 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			if (inst.I.funct3 == 0 && inst.I.imm == 0) {// ecall
 				enum ExceptionType exc = core->cur_privilege == Machine ? E_M_EnvCall : E_U_EnvCall;
 				handle_exception(core, exc, pc);
-				return 0;
+				return EXE_EXC;
 			}
 
 			if (inst.I.funct3 == 0 && inst.I.imm == 1) {// ebreak
 				handle_exception(core, E_Breakpoint, pc);
-				return 0;
+				return EXE_EXC;
 			}
 
 			if (inst.funct3 == 0 && inst.I.imm == 0x105) { // wfi
@@ -587,7 +587,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 					return err;
 
 				tick_pc(core);
-				return 1;
+				return EXE_WFI;
 			}
 
 			if (inst.funct3 == 0 && inst.I.imm == 0x302) // MRET
@@ -598,7 +598,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			}
 
 			handle_exception(core, E_Illegal_Instr, inst.bits);
-			return 0;
+			return EXE_EXC;
 		}
 		case 0x2f: // RV32A (0b00101111)
 		{
@@ -614,7 +614,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			if (rs1 >= dram->size - 3) {
 				handle_exception(core, E_SAMO_Access_Fault,
 						 rs1 + dram->base);
-				return 0;
+				return EXE_EXC;
 			}
 
 			rd = dram_lw(dram, vaddr);
@@ -659,7 +659,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			default:
 				handle_exception(core, E_Illegal_Instr,
 						 inst.bits);
-				return 0;
+				return EXE_EXC;
 			}
 
 			if (write_mem)
@@ -670,11 +670,11 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		}
 		default:
 			handle_exception(core, E_Illegal_Instr, inst.bits);
-			return 0;
+			return EXE_EXC;
 		}
 
 		tick_pc(core);
 	}
 
-	return 0;
+	return EXE_OK;
 }

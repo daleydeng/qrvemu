@@ -190,14 +190,17 @@ restart:
 			elapsed_us,
 			instrs_per_flip); // Execute upto 1024 cycles before breaking out.
 		switch (ret) {
-		case 0:
+		case EXE_OK:
+		case EXE_INTR:
+		case EXE_EXC:
 			break;
-		case 1:
+		case EXE_WFI:
 			if (do_sleep)
 				MiniSleep();
 			*this_ccount += instrs_per_flip;
 			break;
-		case 3:
+
+		case 0x1111:
 			instct = 0;
 			break;
 		case 0x7777:

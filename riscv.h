@@ -448,12 +448,19 @@ static inline void handle_exception(struct rvcore_rv32ima *core,
 	handle_trap(core, mcause, mtval);
 }
 
-int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-int execute_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-int execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
-int execute_aext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+enum ExeResult {
+	EXE_OK,
+	EXE_INTR,
+	EXE_EXC,
+	EXE_WFI,
+};
 
-int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch);
+enum ExeResult execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+enum ExeResult execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+enum ExeResult execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+enum ExeResult execute_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+enum ExeResult execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+enum ExeResult execute_aext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+
+enum ExeResult step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch);
 #endif
