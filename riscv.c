@@ -180,65 +180,6 @@ enum ExeResult execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct plat
 	return EXE_OK;
 }
 
-enum ExeResult execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) // adapt to XLEN
-{
-	regtype rs1 = rX(core, inst.R.rs1);
-	regtype rs2 = rX(core, inst.R.rs2);
-	regtype rd = 0;
-
-	switch (inst.R.funct3) //0x02000000 = RV32M
-	{
-	case 0: // mul
-		rd = rs1 * rs2;
-		break;
-	case 1: // mulh
-		rd = ((int64_t)((int32_t)rs1) * (int64_t)((int32_t)rs2)) >> 32;
-		break; // MULH
-	case 2: // mulhsu
-		rd = ((int64_t)((int32_t)rs1) * (uint64_t)rs2) >> 32;
-		break;
-	case 3: // mulhu
-		rd = ((uint64_t)rs1 * (uint64_t)rs2) >> 32;
-		break;
-	case 4: // div
-		if (rs2 == 0)
-			rd = -1;
-		else
-			rd = ((int32_t)rs1 == INT32_MIN && (int32_t)rs2 == -1) ?
-				     rs1 :
-				     ((int32_t)rs1 / (int32_t)rs2);
-		break;
-	case 5: // divu
-		if (rs2 == 0)
-			rd = 0xffffffff;
-		else
-			rd = rs1 / rs2;
-		break;
-	case 6: // rem
-		if (rs2 == 0)
-			rd = rs1;
-		else
-			rd = ((int32_t)rs1 == INT32_MIN && (int32_t)rs2 == -1) ?
-				     0 :
-				     ((uint32_t)((int32_t)rs1 % (int32_t)rs2));
-		break;
-	case 7: // remu
-		if (rs2 == 0)
-			rd = rs1;
-		else
-			rd = rs1 % rs2;
-		break;
-	}
-	wX(core, inst.R.rd, rd);
-	return EXE_OK;
-}
-
-enum ExeResult execute_aext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
-{
-
-	return EXE_OK;
-}
-
 enum ExeResult step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 {
 	int err = 0;
@@ -600,74 +541,12 @@ enum ExeResult step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst
 			handle_exception(core, E_Illegal_Instr, inst.bits);
 			return EXE_EXC;
 		}
+
 		case 0x2f: // RV32A (0b00101111)
-		{
-			regtype rs1 = rX(core, inst.R.rs1);
-			regtype rs2 = rX(core, inst.R.rs2);
-			uint32_t irmid = (ir >> 27) & 0x1f;
-			xlenbits rd = 0;
-
-			rs1 -= dram->base;
-			xlenbits vaddr = rs1 + dram->base;
-
-			// We don't implement load/store from UART or CLNT with RV32A here.
-			if (rs1 >= dram->size - 3) {
-				handle_exception(core, E_SAMO_Access_Fault,
-						 rs1 + dram->base);
-				return EXE_EXC;
-			}
-
-			rd = dram_lw(dram, vaddr);
-
-			// Referenced a little bit of https://github.com/franzflasch/riscv_em/blob/master/src/core/core.c
-			uint32_t write_mem = 1;
-			switch (irmid) {
-			case 2: //LR.W (0b00010)
-				write_mem = 0;
-				plat->reservation = rs1;
-				break;
-			case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
-				rd = plat->reservation != rs1;
-				write_mem = !rd; // Only write if slot is valid.
-				break;
-			case 1:
-				break; //AMOSWAP.W (0b00001)
-			case 0:
-				rs2 += rd;
-				break; //AMOADD.W (0b00000)
-			case 4:
-				rs2 ^= rd;
-				break; //AMOXOR.W (0b00100)
-			case 12:
-				rs2 &= rd;
-				break; //AMOAND.W (0b01100)
-			case 8:
-				rs2 |= rd;
-				break; //AMOOR.W (0b01000)
-			case 16:
-				rs2 = ((int32_t)rs2 < (int32_t)rd) ? rs2 : rd;
-				break; //AMOMIN.W (0b10000)
-			case 20:
-				rs2 = ((int32_t)rs2 > (int32_t)rd) ? rs2 : rd;
-				break; //AMOMAX.W (0b10100)
-			case 24:
-				rs2 = (rs2 < rd) ? rs2 : rd;
-				break; //AMOMINU.W (0b11000)
-			case 28:
-				rs2 = (rs2 > rd) ? rs2 : rd;
-				break; //AMOMAXU.W (0b11100)
-			default:
-				handle_exception(core, E_Illegal_Instr,
-						 inst.bits);
-				return EXE_EXC;
-			}
-
-			if (write_mem)
-				dram_sw(dram, vaddr, rs2);
-
-			wX(core, inst.R.rd, rd);
+			if ((err = execute_aext(inst, core, plat)))
+				return err;
 			break;
-		}
+
 		default:
 			handle_exception(core, E_Illegal_Instr, inst.bits);
 			return EXE_EXC;
@@ -676,5 +555,124 @@ enum ExeResult step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst
 		tick_pc(core);
 	}
 
+	return EXE_OK;
+}
+
+enum ExeResult execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) // adapt to XLEN
+{
+	regtype rs1 = rX(core, inst.R.rs1);
+	regtype rs2 = rX(core, inst.R.rs2);
+	regtype rd = 0;
+
+	switch (inst.R.funct3) //0x02000000 = RV32M
+	{
+	case 0: // mul
+		rd = rs1 * rs2;
+		break;
+	case 1: // mulh
+		rd = ((int64_t)((int32_t)rs1) * (int64_t)((int32_t)rs2)) >> 32;
+		break; // MULH
+	case 2: // mulhsu
+		rd = ((int64_t)((int32_t)rs1) * (uint64_t)rs2) >> 32;
+		break;
+	case 3: // mulhu
+		rd = ((uint64_t)rs1 * (uint64_t)rs2) >> 32;
+		break;
+	case 4: // div
+		if (rs2 == 0)
+			rd = -1;
+		else
+			rd = ((int32_t)rs1 == INT32_MIN && (int32_t)rs2 == -1) ?
+				     rs1 :
+				     ((int32_t)rs1 / (int32_t)rs2);
+		break;
+	case 5: // divu
+		if (rs2 == 0)
+			rd = 0xffffffff;
+		else
+			rd = rs1 / rs2;
+		break;
+	case 6: // rem
+		if (rs2 == 0)
+			rd = rs1;
+		else
+			rd = ((int32_t)rs1 == INT32_MIN && (int32_t)rs2 == -1) ?
+				     0 :
+				     ((uint32_t)((int32_t)rs1 % (int32_t)rs2));
+		break;
+	case 7: // remu
+		if (rs2 == 0)
+			rd = rs1;
+		else
+			rd = rs1 % rs2;
+		break;
+	}
+	wX(core, inst.R.rd, rd);
+	return EXE_OK;
+}
+
+enum ExeResult execute_aext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
+{
+	struct dram *dram = plat->dram;
+	regtype rs1 = rX(core, inst.R.rs1);
+	regtype rs2 = rX(core, inst.R.rs2);
+	uint32_t irmid = inst.R.funct7 >> 2;
+	xlenbits rd = 0;
+
+	// We don't implement load/store from UART or CLNT with RV32A here.
+	if (!dram_is_in(dram, rs1)) {
+		handle_exception(core, E_SAMO_Access_Fault, rs1);
+		return EXE_EXC;
+	}
+
+	rd = dram_lw(dram, rs1);
+
+	// Referenced a little bit of https://github.com/franzflasch/riscv_em/blob/master/src/core/core.c
+	uint32_t write_mem = 1;
+	switch (irmid) {
+	case 2: //LR.W (0b00010)
+		write_mem = 0;
+		plat->reservation = rs1;
+		break;
+	case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
+		rd = plat->reservation != rs1;
+		write_mem = !rd; // Only write if slot is valid.
+		break;
+	case 1:
+		break; //AMOSWAP.W (0b00001)
+	case 0:
+		rs2 += rd;
+		break; //AMOADD.W (0b00000)
+	case 4:
+		rs2 ^= rd;
+		break; //AMOXOR.W (0b00100)
+	case 12:
+		rs2 &= rd;
+		break; //AMOAND.W (0b01100)
+	case 8:
+		rs2 |= rd;
+		break; //AMOOR.W (0b01000)
+	case 16:
+		rs2 = ((int32_t)rs2 < (int32_t)rd) ? rs2 : rd;
+		break; //AMOMIN.W (0b10000)
+	case 20:
+		rs2 = ((int32_t)rs2 > (int32_t)rd) ? rs2 : rd;
+		break; //AMOMAX.W (0b10100)
+	case 24:
+		rs2 = (rs2 < rd) ? rs2 : rd;
+		break; //AMOMINU.W (0b11000)
+	case 28:
+		rs2 = (rs2 > rd) ? rs2 : rd;
+		break; //AMOMAXU.W (0b11100)
+	default:
+		handle_exception(core, E_Illegal_Instr,
+					inst.bits);
+		return EXE_EXC;
+	}
+
+	if (write_mem)
+		dram_sw(dram, rs1, rs2);
+
+	wX(core, inst.R.rd, rd);
 	return EXE_OK;
 }
