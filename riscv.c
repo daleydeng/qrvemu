@@ -324,13 +324,17 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 
 		switch (inst.opcode) {
 		case 0x37: // LUI (0b0110111)
-			wX(core, inst.U.rd, inst.U.imm << 12);
+		{
+			xlenbits imm = inst.U.imm << 12; // 32bit no sign_ext needed
+			wX(core, inst.U.rd, imm);
 			break;
-
+		}
 		case 0x17: // AUIPC (0b0010111)
-			wX(core, inst.U.rd, pc + (inst.U.imm << 12));
+		{
+			xlenbits imm = inst.U.imm << 12; // 32bit no sign_ext needed
+			wX(core, inst.U.rd, pc + imm);
 			break;
-
+		}
 		case 0x6F: // JAL (0b1101111)
 		{
 			xlenbits imm = sign_ext(
@@ -499,6 +503,51 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			break;
 		}
 		case 0x13: // Op-immediate 0b0010011
+		{
+			xlenbits imm = sign_ext(inst.I.imm, 12);
+			xlenbits imm_5_11 = imm >> 5;
+			xlenbits shamt = XLEN == 32 ? imm & 0x1F : imm;
+			regtype rs1 = rX(core, inst.R.rs1);
+			xlenbits rval = 0;
+
+			switch (inst.I.funct3)
+			{
+			case 0: // addi
+				rval = rs1 + imm; 
+				break;
+			case 2: // slti
+				rval = (s_xlenbits)rs1 < (s_xlenbits)imm;
+				break;
+			case 3: // sltiu
+				rval = rs1 < imm;
+				break;
+			case 7: // andi
+				rval = rs1 & imm;
+				break;
+			case 6: // ori
+				rval = rs1 | imm;
+				break;
+			case 4: // xori
+				rval = rs1 ^ imm;
+				break;
+
+			case 1: // slli
+				if (XLEN == 32)
+					assert(imm_5_11 == 0);
+				rval = rs1 << shamt;
+				break;
+
+			case 5:
+				if (imm_5_11 == 0) { // srli
+					rval = rs1 >> shamt;
+				} else if (imm_5_11 == 0x20) { // srai
+					rval = ((s_xlenbits) rs1) >> shamt;
+				}
+				break;
+			}
+			wX(core, inst.R.rd, rval);
+			break;
+		}
 		case 0x33: // Op           0b0110011
 		{
 			uint32_t imm = ir >> 20;

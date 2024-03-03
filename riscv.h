@@ -8,6 +8,7 @@
 
 #define XLEN 32
 typedef uint32_t xlenbits;
+typedef int32_t s_xlenbits;
 
 typedef uint32_t bits32;
 typedef union {
