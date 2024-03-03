@@ -155,7 +155,7 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
 
 int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
-	assert(inst.priv_I.imm == 0x105);
+	assert(inst.I.imm == 0x105);
 	core->mstatus.MIE = true;
 	plat->wfi = true;
 	return 0;
@@ -163,7 +163,7 @@ int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 
 int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 {
-	assert(inst.priv_I.imm == 0x302); // 0b0011 0000 0010
+	assert(inst.I.imm == 0x302); // 0b0011 0000 0010
 	// refer Volume II: RISC-V Privileged Architectures V20211203 manual 8.6.4 Trap Return
 	// The MRET instruction is used to return from a trap taken into M-mode. MRET first determines
 	// what the new privilege mode will be according to the values of MPP and MPV in mstatus or
@@ -180,7 +180,7 @@ int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 	return 0;
 }
 
-static int execute_mext(ast_t inst, struct rvcore_rv32ima *core) // adapt to XLEN
+int execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat) // adapt to XLEN
 {
 	regtype rs1 = rX(core, inst.R.rs1);
 	regtype rs2 = rX(core, inst.R.rs2);
@@ -230,6 +230,12 @@ static int execute_mext(ast_t inst, struct rvcore_rv32ima *core) // adapt to XLE
 		break;
 	}
 	wX(core, inst.R.rd, rd);
+	return 0;
+}
+
+int execute_aext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
+{
+
 	return 0;
 }
 
@@ -464,7 +470,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		{
 			xlenbits imm = sign_ext(inst.I.imm, 12);
 			xlenbits imm_5_11 = imm >> 5;
-			xlenbits shamt = XLEN == 32 ? imm & MASK(5): imm;
+			xlenbits shamt = XLEN == 32 ? imm & MASK(5) : imm;
 			regtype rs1 = rX(core, inst.R.rs1);
 			xlenbits rd = 0;
 
@@ -513,11 +519,11 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 
 			xlenbits rd = 0;
 			if (inst.R.funct7 == 0 || inst.R.funct7 == 0x20) {
-				switch (inst.R.funct3)
-				{
+				switch (inst.R.funct3) {
 				case 0: // add/sub
-					rd = (inst.R.funct7 == 0x20) ? (rs1 - rs2) :
-								   (rs1 + rs2);
+					rd = (inst.R.funct7 == 0x20) ?
+						     (rs1 - rs2) :
+						     (rs1 + rs2);
 					break;
 				case 1: // sll
 					rd = rs1 << shamt;
@@ -546,11 +552,11 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				wX(core, inst.R.rd, rd);
 
 			} else if (inst.R.funct7 == 1) {
-				if ((err = execute_mext(inst, core)))
+				if ((err = execute_mext(inst, core, plat)))
 					return err;
 			} else {
 				handle_exception(core, E_Illegal_Instr,
-							inst.bits);
+						 inst.bits);
 				return 0;
 			}
 			break;
@@ -559,64 +565,40 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			break;
 		case 0x73: // Zifencei+Zicsr  (0b1110011)
 		{
-			if ((inst.funct3 & MASK(2))) // Zicsr function.
-			{
+			if ((inst.funct3 & MASK(2))) { // Zicsr function.
 				if ((err = execute_Zicsr(inst, core, plat)))
 					return err;
+				break;
+			}
 
-			} else if (inst.funct3 == 0x0) // "SYSTEM" 0b000
-			{
-				int csrno = inst.priv_I.imm;
-				if (csrno == 0x105) //WFI (Wait for interrupts)
-				{
-					if ((err = execute_wfi(inst, core,
-							       plat)))
-						return err;
-
-					tick_pc(core);
-					return 1;
-
-				} else if (((csrno & 0xff) == 0x02)) // MRET
-				{
-					if ((err = execute_mret(inst, core,
-								plat)))
-						return err;
-
-				} else {
-					switch (csrno) {
-					case 0:
-						if (core->cur_privilege ==
-						    Machine) {
-							handle_exception(
-								core,
-								E_M_EnvCall,
-								pc);
-							return 0;
-						} else {
-							handle_exception(
-								core,
-								E_U_EnvCall,
-								pc);
-							return 0;
-						}
-					case 1:
-						handle_exception(
-							core, E_Breakpoint, pc);
-						return 0;
-					default:
-						handle_exception(
-							core, E_Illegal_Instr,
-							inst.bits);
-						return 0;
-					}
-				}
-			} else {
-				handle_exception(core, E_Illegal_Instr,
-						 inst.bits);
+			if (inst.I.funct3 == 0 && inst.I.imm == 0) {// ecall
+				enum ExceptionType exc = core->cur_privilege == Machine ? E_M_EnvCall : E_U_EnvCall;
+				handle_exception(core, exc, pc);
 				return 0;
 			}
 
-			break;
+			if (inst.I.funct3 == 0 && inst.I.imm == 1) {// ebreak
+				handle_exception(core, E_Breakpoint, pc);
+				return 0;
+			}
+
+			if (inst.funct3 == 0 && inst.I.imm == 0x105) { // wfi
+				if ((err = execute_wfi(inst, core, plat)))
+					return err;
+
+				tick_pc(core);
+				return 1;
+			}
+
+			if (inst.funct3 == 0 && inst.I.imm == 0x302) // MRET
+			{
+				if ((err = execute_mret(inst, core, plat)))
+					return err;
+				break;
+			}
+
+			handle_exception(core, E_Illegal_Instr, inst.bits);
+			return 0;
 		}
 		case 0x2f: // RV32A (0b00101111)
 		{

@@ -142,21 +142,7 @@ typedef union {
 		bits32 imm_1_10 : 10;
 		bits32 imm_20 : 1;
 	} J;
-	struct {
-		bits32 opcode : 7;
-		bits32 rd : 5;
-		bits32 funct3 : 3;
-		bits32 rs1 : 5;
-		bits32 rs2 : 5;
-		bits32 funct7 : 7;
-	} priv_R;
-	struct {
-		bits32 opcode : 7;
-		bits32 rd : 5;
-		bits32 funct3 : 3;
-		bits32 rs1 : 5;
-		bits32 imm : 12;
-	} priv_I;
+
 	struct {
 		bits32 opcode : 7;
 		bits32 rd : 5;
@@ -466,6 +452,8 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat
 int execute_wfi(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 int execute_store(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+int execute_mext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
+int execute_aext(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat);
 
 int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch);
 #endif
