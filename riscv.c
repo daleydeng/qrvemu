@@ -464,7 +464,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		{
 			xlenbits imm = sign_ext(inst.I.imm, 12);
 			xlenbits imm_5_11 = imm >> 5;
-			xlenbits shamt = XLEN == 32 ? imm & 0x1F : imm;
+			xlenbits shamt = XLEN == 32 ? imm & MASK(5): imm;
 			regtype rs1 = rX(core, inst.R.rs1);
 			xlenbits rd = 0;
 
@@ -509,7 +509,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		{
 			regtype rs1 = rX(core, inst.R.rs1);
 			regtype rs2 = rX(core, inst.R.rs2);
-			int shamt = XLEN == 32 ? rs2 & 0x1F : rs2;
+			int shamt = XLEN == 32 ? rs2 & MASK(5) : rs2;
 
 			xlenbits rd = 0;
 			if (inst.R.funct7 == 0 || inst.R.funct7 == 0x20) {
