@@ -55,8 +55,8 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 	tick_pc(core);
 }
 
-#define READ_CSR(no, name)         \
-	case no:                   \
+#define READ_CSR(no, name)       \
+	case no:                 \
 		rd = core->name; \
 		break;
 #define WRITE_CSR(no, name)             \
@@ -180,6 +180,59 @@ int execute_mret(ast_t inst, struct rvcore_rv32ima *core, struct platform *plat)
 	return 0;
 }
 
+static int execute_mext(ast_t inst, struct rvcore_rv32ima *core) // adapt to XLEN
+{
+	regtype rs1 = rX(core, inst.R.rs1);
+	regtype rs2 = rX(core, inst.R.rs2);
+	regtype rd = 0;
+
+	switch (inst.R.funct3) //0x02000000 = RV32M
+	{
+	case 0: // mul
+		rd = rs1 * rs2;
+		break;
+	case 1: // mulh
+		rd = ((int64_t)((int32_t)rs1) * (int64_t)((int32_t)rs2)) >> 32;
+		break; // MULH
+	case 2: // mulhsu
+		rd = ((int64_t)((int32_t)rs1) * (uint64_t)rs2) >> 32;
+		break;
+	case 3: // mulhu
+		rd = ((uint64_t)rs1 * (uint64_t)rs2) >> 32;
+		break;
+	case 4: // div
+		if (rs2 == 0)
+			rd = -1;
+		else
+			rd = ((int32_t)rs1 == INT32_MIN && (int32_t)rs2 == -1) ?
+				     rs1 :
+				     ((int32_t)rs1 / (int32_t)rs2);
+		break;
+	case 5: // divu
+		if (rs2 == 0)
+			rd = 0xffffffff;
+		else
+			rd = rs1 / rs2;
+		break;
+	case 6: // rem
+		if (rs2 == 0)
+			rd = rs1;
+		else
+			rd = ((int32_t)rs1 == INT32_MIN && (int32_t)rs2 == -1) ?
+				     0 :
+				     ((uint32_t)((int32_t)rs1 % (int32_t)rs2));
+		break;
+	case 7: // remu
+		if (rs2 == 0)
+			rd = rs1;
+		else
+			rd = rs1 % rs2;
+		break;
+	}
+	wX(core, inst.R.rd, rd);
+	return 0;
+}
+
 int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 {
 	int err = 0;
@@ -224,13 +277,15 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		switch (inst.opcode) {
 		case 0x37: // LUI (0b0110111)
 		{
-			xlenbits imm = inst.U.imm << 12; // 32bit no sign_ext needed
+			xlenbits imm = inst.U.imm
+				       << 12; // 32bit no sign_ext needed
 			wX(core, inst.U.rd, imm);
 			break;
 		}
 		case 0x17: // AUIPC (0b0010111)
 		{
-			xlenbits imm = inst.U.imm << 12; // 32bit no sign_ext needed
+			xlenbits imm = inst.U.imm
+				       << 12; // 32bit no sign_ext needed
 			wX(core, inst.U.rd, pc + imm);
 			break;
 		}
@@ -355,7 +410,8 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		{
 			regtype rs1 = rX(core, inst.S.rs1);
 			regtype rs2 = rX(core, inst.S.rs2);
-			xlenbits imm = sign_ext(inst.S.imm_0_4 | inst.S.imm_5_11 << 5, 12);
+			xlenbits imm = sign_ext(
+				inst.S.imm_0_4 | inst.S.imm_5_11 << 5, 12);
 			xlenbits vaddr = rs1 + imm;
 
 			if (dram_is_in(dram, vaddr)) {
@@ -384,19 +440,22 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 					*((bits32 *)&plat->mtimecmp + 1) = rs2;
 				else if (vaddr == 0x11004000) //CLNT
 					*((bits32 *)&plat->mtimecmp) = rs2;
-				else if (vaddr == 0x11100000) //SYSCON (reboot, poweroff, etc.)
+				else if (vaddr ==
+					 0x11100000) //SYSCON (reboot, poweroff, etc.)
 				{
 					tick_pc(core);
 					return rs2; // NOTE: PC will be PC of Syscon.
 
 				} else {
 					if (plat->store) {
-						if ((err = plat->store(plat, vaddr, rs2)))
+						if ((err = plat->store(
+							     plat, vaddr, rs2)))
 							return err;
 					}
 				}
 			} else {
-				handle_exception(core, E_SAMO_Access_Fault, vaddr);
+				handle_exception(core, E_SAMO_Access_Fault,
+						 vaddr);
 				return 0;
 			}
 			break;
@@ -409,10 +468,9 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			regtype rs1 = rX(core, inst.R.rs1);
 			xlenbits rd = 0;
 
-			switch (inst.I.funct3)
-			{
+			switch (inst.I.funct3) {
 			case 0: // addi
-				rd = rs1 + imm; 
+				rd = rs1 + imm;
 				break;
 			case 2: // slti
 				rd = (s_xlenbits)rs1 < (s_xlenbits)imm;
@@ -440,7 +498,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				if (imm_5_11 == 0) { // srli
 					rd = rs1 >> shamt;
 				} else if (imm_5_11 == 0x20) { // srai
-					rd = ((s_xlenbits) rs1) >> shamt;
+					rd = ((s_xlenbits)rs1) >> shamt;
 				}
 				break;
 			}
@@ -449,102 +507,34 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		}
 		case 0x33: // Op           0b0110011
 		{
-			uint32_t imm = ir >> 20;
-			imm = imm | ((imm & 0x800) ? 0xfffff000 : 0);
 			regtype rs1 = rX(core, inst.R.rs1);
-			uint32_t is_reg = !!(ir & 0x20);
-			regtype rs2 = is_reg ? rX(core, inst.R.rs2) : imm;
+			regtype rs2 = rX(core, inst.R.rs2);
+			int shamt = XLEN == 32 ? rs2 & 0x1F : rs2;
+
 			xlenbits rd = 0;
-
-			if (is_reg && (ir & 0x02000000)) {
-				switch ((ir >> 12) & 7) //0x02000000 = RV32M
+			if (inst.R.funct7 == 0 || inst.R.funct7 == 0x20) {
+				switch (inst.R.funct3)
 				{
-				case 0:
-					rd = rs1 * rs2;
-					break; // MUL
-#ifndef CUSTOM_MULH // If compiling on a system that doesn't natively, or via libgcc support 64-bit math.
-				case 1:
-					rd = ((int64_t)((int32_t)rs1) *
-						(int64_t)((int32_t)rs2)) >>
-					       32;
-					break; // MULH
-				case 2:
-					rd = ((int64_t)((int32_t)rs1) *
-						(uint64_t)rs2) >>
-					       32;
-					break; // MULHSU
-				case 3:
-					rd = ((uint64_t)rs1 *
-						(uint64_t)rs2) >>
-					       32;
-					break; // MULHU
-#else
-					CUSTOM_MULH
-#endif
-				case 4:
-					if (rs2 == 0)
-						rd = -1;
-					else
-						rd = ((int32_t)rs1 ==
-								INT32_MIN &&
-							(int32_t)rs2 == -1) ?
-							       rs1 :
-							       ((int32_t)rs1 /
-								(int32_t)rs2);
-					break; // DIV
-				case 5:
-					if (rs2 == 0)
-						rd = 0xffffffff;
-					else
-						rd = rs1 / rs2;
-					break; // DIVU
-				case 6:
-					if (rs2 == 0)
-						rd = rs1;
-					else
-						rd = ((int32_t)rs1 ==
-								INT32_MIN &&
-							(int32_t)rs2 == -1) ?
-							       0 :
-							       ((uint32_t)((int32_t)
-										   rs1 %
-									   (int32_t)
-										   rs2));
-					break; // REM
-				case 7:
-					if (rs2 == 0)
-						rd = rs1;
-					else
-						rd = rs1 % rs2;
-					break; // REMU
-				}
-
-			} else {
-				switch ((ir >> 12) &
-					7) // These could be either op-immediate or op commands.  Be careful.
-				{
-				case 0:
-					rd = (is_reg && (ir & 0x40000000)) ?
-						       (rs1 - rs2) :
-						       (rs1 + rs2);
+				case 0: // add/sub
+					rd = (inst.R.funct7 == 0x20) ? (rs1 - rs2) :
+								   (rs1 + rs2);
 					break;
-				case 1:
-					rd = rs1 << (rs2 & 0x1F);
+				case 1: // sll
+					rd = rs1 << shamt;
 					break;
-				case 2:
-					rd = (int32_t)rs1 < (int32_t)rs2;
+				case 2: // slt
+					rd = (s_xlenbits)rs1 < (s_xlenbits)rs2;
 					break;
-				case 3:
+				case 3: // sltu
 					rd = rs1 < rs2;
 					break;
-				case 4:
+				case 4: // xor
 					rd = rs1 ^ rs2;
 					break;
-				case 5:
-					rd = (ir & 0x40000000) ?
-						       (((int32_t)rs1) >>
-							(rs2 & 0x1F)) :
-						       (rs1 >> (rs2 & 0x1F));
+				case 5: // srl/sra
+					rd = (inst.R.funct7 == 0x20) ?
+						     (((int32_t)rs1) >> shamt) :
+						     (rs1 >> shamt);
 					break;
 				case 6:
 					rd = rs1 | rs2;
@@ -553,8 +543,16 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 					rd = rs1 & rs2;
 					break;
 				}
+				wX(core, inst.R.rd, rd);
+
+			} else if (inst.R.funct7 == 1) {
+				if ((err = execute_mext(inst, core)))
+					return err;
+			} else {
+				handle_exception(core, E_Illegal_Instr,
+							inst.bits);
+				return 0;
 			}
-			wX(core, inst.R.rd, rd);
 			break;
 		}
 		case 0x0f: // 0b0001111 fence
@@ -648,8 +646,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				break;
 			case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
 				rd = plat->reservation != rs1;
-				write_mem =
-					!rd; // Only write if slot is valid.
+				write_mem = !rd; // Only write if slot is valid.
 				break;
 			case 1:
 				break; //AMOSWAP.W (0b00001)
@@ -666,12 +663,10 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				rs2 |= rd;
 				break; //AMOOR.W (0b01000)
 			case 16:
-				rs2 = ((int32_t)rs2 < (int32_t)rd) ? rs2 :
-								       rd;
+				rs2 = ((int32_t)rs2 < (int32_t)rd) ? rs2 : rd;
 				break; //AMOMIN.W (0b10000)
 			case 20:
-				rs2 = ((int32_t)rs2 > (int32_t)rd) ? rs2 :
-								       rd;
+				rs2 = ((int32_t)rs2 > (int32_t)rd) ? rs2 : rd;
 				break; //AMOMAX.W (0b10100)
 			case 24:
 				rs2 = (rs2 < rd) ? rs2 : rd;
