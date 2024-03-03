@@ -57,7 +57,7 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 
 #define READ_CSR(no, name)         \
 	case no:                   \
-		rval = core->name; \
+		rd = core->name; \
 		break;
 #define WRITE_CSR(no, name)             \
 	case no:                        \
@@ -67,7 +67,7 @@ void handle_trap(struct rvcore_rv32ima *core, mcause_t mcause, xlenbits mtval)
 int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
 		  struct platform *plat)
 {
-	xlenbits rval = 0;
+	xlenbits rd = 0;
 	int i_rs1 = inst.Zicsr.rs1_uimm;
 	xlenbits uimm = inst.Zicsr.rs1_uimm;
 	xlenbits rs1 = core->regs[i_rs1];
@@ -77,16 +77,16 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
 	// Generally, support for Zicsr
 	switch (inst.Zicsr.csr) {
 	case 0xC00:
-		rval = (xlenbits)core->mcycle.v;
+		rd = (xlenbits)core->mcycle.v;
 		break;
 	case 0xC01:
-		rval = (xlenbits)core->mtime.v;
+		rd = (xlenbits)core->mtime.v;
 		break;
 	case 0xC80:
-		rval = core->mcycle.high;
+		rd = core->mcycle.high;
 		break;
 	case 0xC81:
-		rval = core->mtime.high;
+		rd = core->mtime.high;
 		break;
 
 		READ_CSR(0xf11, mvendorid)
@@ -101,14 +101,14 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
 		READ_CSR(0x343, mtval)
 		READ_CSR(0x344, mip.bits)
 
-	//case 0x3B0: rval = 0; break; //pmpaddr0
-	//case 0x3a0: rval = 0; break; //pmpcfg0
-	//case 0xf12: rval = 0x00000000; break; //marchid
-	//case 0xf13: rval = 0x00000000; break; //mimpid
-	//case 0xf14: rval = 0x00000000; break; //mhartid
+	//case 0x3B0: rd = 0; break; //pmpaddr0
+	//case 0x3a0: rd = 0; break; //pmpcfg0
+	//case 0xf12: rd = 0x00000000; break; //marchid
+	//case 0xf13: rd = 0x00000000; break; //mimpid
+	//case 0xf14: rd = 0x00000000; break; //mhartid
 	default:
 		if (plat->read_csr)
-			rval = plat->read_csr(plat, inst);
+			rd = plat->read_csr(plat, inst);
 		break;
 	}
 
@@ -117,19 +117,19 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
 		write_val = rs1;
 		break; //CSRRW
 	case 2:
-		write_val = rval | rs1;
+		write_val = rd | rs1;
 		break; //CSRRS
 	case 3:
-		write_val = rval & ~rs1;
+		write_val = rd & ~rs1;
 		break; //CSRRC
 	case 5:
 		write_val = uimm;
 		break; //CSRRWI
 	case 6:
-		write_val = rval | uimm;
+		write_val = rd | uimm;
 		break; //CSRRSI
 	case 7:
-		write_val = rval & ~uimm;
+		write_val = rd & ~uimm;
 		break; //CSRRCI
 	}
 
@@ -149,7 +149,7 @@ int execute_Zicsr(ast_t inst, struct rvcore_rv32ima *core,
 		break;
 	}
 
-	wX(core, inst.Zicsr.rd, rval);
+	wX(core, inst.Zicsr.rd, rd);
 	return 0;
 }
 
@@ -403,32 +403,32 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			regtype rs1 = rX(core, inst.I.rs1);
 			xlenbits imm = sign_ext(inst.I.imm, 12);
 			xlenbits vaddr = rs1 + imm;
-			xlenbits rval = 0;
+			xlenbits rd = 0;
 
 			if (dram_is_in(dram, vaddr)) {
 				switch (inst.I.funct3) {
 				//LB, LH, LW, LBU, LHU
 				case 0:
-					rval = dram_lb(dram, vaddr);
+					rd = dram_lb(dram, vaddr);
 					break;
 				case 1:
-					rval = dram_lh(dram, vaddr);
+					rd = dram_lh(dram, vaddr);
 					break;
 				case 2:
-					rval = dram_lw(dram, vaddr);
+					rd = dram_lw(dram, vaddr);
 					break;
 				case 4:
-					rval = dram_lbu(dram, vaddr);
+					rd = dram_lbu(dram, vaddr);
 					break;
 				case 5:
-					rval = dram_lhu(dram, vaddr);
+					rd = dram_lhu(dram, vaddr);
 					break;
 				default:
 					handle_exception(core, E_Illegal_Instr,
 							 inst.bits);
 					return 0;
 				}
-				wX(core, inst.I.rd, rval);
+				wX(core, inst.I.rd, rd);
 				break;
 			}
 
@@ -437,19 +437,19 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			{
 				// https://chromitem-soc.readthedocs.io/en/latest/clint.html
 				if (vaddr == 0x1100bffc)
-					rval = core->mtime.high;
+					rd = core->mtime.high;
 				else if (vaddr == 0x1100bff8)
-					rval = core->mtime.low;
+					rd = core->mtime.low;
 				else {
 					if (plat->load)
-						rval = plat->load(plat, vaddr);
+						rd = plat->load(plat, vaddr);
 				}
 			} else {
 				handle_exception(core, E_Load_Access_Fault,
 						 vaddr);
 				return 0;
 			}
-			wX(core, inst.I.rd, rval);
+			wX(core, inst.I.rd, rd);
 			break;
 		}
 		case 0x23: // Store 0b0100011 TODO
@@ -508,44 +508,44 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			xlenbits imm_5_11 = imm >> 5;
 			xlenbits shamt = XLEN == 32 ? imm & 0x1F : imm;
 			regtype rs1 = rX(core, inst.R.rs1);
-			xlenbits rval = 0;
+			xlenbits rd = 0;
 
 			switch (inst.I.funct3)
 			{
 			case 0: // addi
-				rval = rs1 + imm; 
+				rd = rs1 + imm; 
 				break;
 			case 2: // slti
-				rval = (s_xlenbits)rs1 < (s_xlenbits)imm;
+				rd = (s_xlenbits)rs1 < (s_xlenbits)imm;
 				break;
 			case 3: // sltiu
-				rval = rs1 < imm;
+				rd = rs1 < imm;
 				break;
 			case 7: // andi
-				rval = rs1 & imm;
+				rd = rs1 & imm;
 				break;
 			case 6: // ori
-				rval = rs1 | imm;
+				rd = rs1 | imm;
 				break;
 			case 4: // xori
-				rval = rs1 ^ imm;
+				rd = rs1 ^ imm;
 				break;
 
 			case 1: // slli
 				if (XLEN == 32)
 					assert(imm_5_11 == 0);
-				rval = rs1 << shamt;
+				rd = rs1 << shamt;
 				break;
 
 			case 5:
 				if (imm_5_11 == 0) { // srli
-					rval = rs1 >> shamt;
+					rd = rs1 >> shamt;
 				} else if (imm_5_11 == 0x20) { // srai
-					rval = ((s_xlenbits) rs1) >> shamt;
+					rd = ((s_xlenbits) rs1) >> shamt;
 				}
 				break;
 			}
-			wX(core, inst.R.rd, rval);
+			wX(core, inst.R.rd, rd);
 			break;
 		}
 		case 0x33: // Op           0b0110011
@@ -555,27 +555,27 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			regtype rs1 = rX(core, inst.R.rs1);
 			uint32_t is_reg = !!(ir & 0x20);
 			regtype rs2 = is_reg ? rX(core, inst.R.rs2) : imm;
-			xlenbits rval = 0;
+			xlenbits rd = 0;
 
 			if (is_reg && (ir & 0x02000000)) {
 				switch ((ir >> 12) & 7) //0x02000000 = RV32M
 				{
 				case 0:
-					rval = rs1 * rs2;
+					rd = rs1 * rs2;
 					break; // MUL
 #ifndef CUSTOM_MULH // If compiling on a system that doesn't natively, or via libgcc support 64-bit math.
 				case 1:
-					rval = ((int64_t)((int32_t)rs1) *
+					rd = ((int64_t)((int32_t)rs1) *
 						(int64_t)((int32_t)rs2)) >>
 					       32;
 					break; // MULH
 				case 2:
-					rval = ((int64_t)((int32_t)rs1) *
+					rd = ((int64_t)((int32_t)rs1) *
 						(uint64_t)rs2) >>
 					       32;
 					break; // MULHSU
 				case 3:
-					rval = ((uint64_t)rs1 *
+					rd = ((uint64_t)rs1 *
 						(uint64_t)rs2) >>
 					       32;
 					break; // MULHU
@@ -584,9 +584,9 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 #endif
 				case 4:
 					if (rs2 == 0)
-						rval = -1;
+						rd = -1;
 					else
-						rval = ((int32_t)rs1 ==
+						rd = ((int32_t)rs1 ==
 								INT32_MIN &&
 							(int32_t)rs2 == -1) ?
 							       rs1 :
@@ -595,15 +595,15 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 					break; // DIV
 				case 5:
 					if (rs2 == 0)
-						rval = 0xffffffff;
+						rd = 0xffffffff;
 					else
-						rval = rs1 / rs2;
+						rd = rs1 / rs2;
 					break; // DIVU
 				case 6:
 					if (rs2 == 0)
-						rval = rs1;
+						rd = rs1;
 					else
-						rval = ((int32_t)rs1 ==
+						rd = ((int32_t)rs1 ==
 								INT32_MIN &&
 							(int32_t)rs2 == -1) ?
 							       0 :
@@ -614,9 +614,9 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 					break; // REM
 				case 7:
 					if (rs2 == 0)
-						rval = rs1;
+						rd = rs1;
 					else
-						rval = rs1 % rs2;
+						rd = rs1 % rs2;
 					break; // REMU
 				}
 
@@ -625,37 +625,37 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 					7) // These could be either op-immediate or op commands.  Be careful.
 				{
 				case 0:
-					rval = (is_reg && (ir & 0x40000000)) ?
+					rd = (is_reg && (ir & 0x40000000)) ?
 						       (rs1 - rs2) :
 						       (rs1 + rs2);
 					break;
 				case 1:
-					rval = rs1 << (rs2 & 0x1F);
+					rd = rs1 << (rs2 & 0x1F);
 					break;
 				case 2:
-					rval = (int32_t)rs1 < (int32_t)rs2;
+					rd = (int32_t)rs1 < (int32_t)rs2;
 					break;
 				case 3:
-					rval = rs1 < rs2;
+					rd = rs1 < rs2;
 					break;
 				case 4:
-					rval = rs1 ^ rs2;
+					rd = rs1 ^ rs2;
 					break;
 				case 5:
-					rval = (ir & 0x40000000) ?
+					rd = (ir & 0x40000000) ?
 						       (((int32_t)rs1) >>
 							(rs2 & 0x1F)) :
 						       (rs1 >> (rs2 & 0x1F));
 					break;
 				case 6:
-					rval = rs1 | rs2;
+					rd = rs1 | rs2;
 					break;
 				case 7:
-					rval = rs1 & rs2;
+					rd = rs1 & rs2;
 					break;
 				}
 			}
-			wX(core, inst.R.rd, rval);
+			wX(core, inst.R.rd, rd);
 			break;
 		}
 		case 0x0f: // 0b0001111 fence
@@ -726,7 +726,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			regtype rs1 = rX(core, inst.R.rs1);
 			regtype rs2 = rX(core, inst.R.rs2);
 			uint32_t irmid = (ir >> 27) & 0x1f;
-			xlenbits rval = 0;
+			xlenbits rd = 0;
 
 			rs1 -= dram->base;
 			xlenbits vaddr = rs1 + dram->base;
@@ -738,7 +738,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				return 0;
 			}
 
-			rval = dram_lw(dram, vaddr);
+			rd = dram_lw(dram, vaddr);
 
 			// Referenced a little bit of https://github.com/franzflasch/riscv_em/blob/master/src/core/core.c
 			uint32_t write_mem = 1;
@@ -748,37 +748,37 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				plat->reservation = rs1;
 				break;
 			case 3: //SC.W (0b00011) (Make sure we have a slot, and, it's valid)
-				rval = plat->reservation != rs1;
+				rd = plat->reservation != rs1;
 				write_mem =
-					!rval; // Only write if slot is valid.
+					!rd; // Only write if slot is valid.
 				break;
 			case 1:
 				break; //AMOSWAP.W (0b00001)
 			case 0:
-				rs2 += rval;
+				rs2 += rd;
 				break; //AMOADD.W (0b00000)
 			case 4:
-				rs2 ^= rval;
+				rs2 ^= rd;
 				break; //AMOXOR.W (0b00100)
 			case 12:
-				rs2 &= rval;
+				rs2 &= rd;
 				break; //AMOAND.W (0b01100)
 			case 8:
-				rs2 |= rval;
+				rs2 |= rd;
 				break; //AMOOR.W (0b01000)
 			case 16:
-				rs2 = ((int32_t)rs2 < (int32_t)rval) ? rs2 :
-								       rval;
+				rs2 = ((int32_t)rs2 < (int32_t)rd) ? rs2 :
+								       rd;
 				break; //AMOMIN.W (0b10000)
 			case 20:
-				rs2 = ((int32_t)rs2 > (int32_t)rval) ? rs2 :
-								       rval;
+				rs2 = ((int32_t)rs2 > (int32_t)rd) ? rs2 :
+								       rd;
 				break; //AMOMAX.W (0b10100)
 			case 24:
-				rs2 = (rs2 < rval) ? rs2 : rval;
+				rs2 = (rs2 < rd) ? rs2 : rd;
 				break; //AMOMINU.W (0b11000)
 			case 28:
-				rs2 = (rs2 > rval) ? rs2 : rval;
+				rs2 = (rs2 > rd) ? rs2 : rd;
 				break; //AMOMAXU.W (0b11100)
 			default:
 				handle_exception(core, E_Illegal_Instr,
@@ -789,7 +789,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			if (write_mem)
 				dram_sw(dram, vaddr, rs2);
 
-			wX(core, inst.R.rd, rval);
+			wX(core, inst.R.rd, rd);
 			break;
 		}
 		default:
