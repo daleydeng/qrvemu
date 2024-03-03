@@ -363,50 +363,58 @@ static inline xlenbits dram_end(struct dram *dram)
 
 void dram_alloc(struct dram *dram, xlenbits base, size_t size);
 
-static inline void dram_sw(struct dram *dram, xlenbits addr, uint32_t val)
+static inline void dram_sw(struct dram *dram, xlenbits vaddr, uint32_t val)
 {
-	assert(addr < dram->size);
-	*(uint32_t*)(dram->image + addr) = val;
+	xlenbits paddr = vaddr - dram->base;
+	assert(paddr < dram->size);
+	*(uint32_t*)(dram->image + paddr) = val;
 }
-static inline void dram_sh(struct dram *dram, xlenbits addr, uint16_t val)
+static inline void dram_sh(struct dram *dram, xlenbits vaddr, uint16_t val)
 {
-	assert(addr < dram->size);
-	*(uint16_t*)(dram->image + addr) = val;
+	xlenbits paddr = vaddr - dram->base;
+	assert(paddr < dram->size);
+	*(uint16_t*)(dram->image + paddr) = val;
 }
-static inline void dram_sb(struct dram *dram, xlenbits addr, uint8_t val)
+static inline void dram_sb(struct dram *dram, xlenbits vaddr, uint8_t val)
 {
-	assert(addr < dram->size);
-	*(uint8_t*)(dram->image + addr) = val;
+	xlenbits paddr = vaddr - dram->base;
+	assert(paddr < dram->size);
+	*(uint8_t*)(dram->image + paddr) = val;
 }
-static inline uint32_t dram_lw(struct dram *dram, xlenbits addr)
+static inline uint32_t dram_lw(struct dram *dram, xlenbits vaddr)
 {
-	assert(addr < dram->size);
-	return *(uint32_t*)(dram->image + addr);
+	xlenbits paddr = vaddr - dram->base;
+	assert(paddr < dram->size);
+	return *(uint32_t*)(dram->image + paddr);
 }
-static inline uint16_t dram_lhu(struct dram *dram, xlenbits addr)
+static inline uint16_t dram_lhu(struct dram *dram, xlenbits vaddr)
 {
-	assert(addr < dram->size);
-	return *(uint16_t*)(dram->image + addr);
+	xlenbits paddr = vaddr - dram->base;
+	assert(paddr < dram->size);
+	return *(uint16_t*)(dram->image + paddr);
 }
-static inline uint16_t dram_lbu(struct dram *dram, xlenbits addr)
+static inline uint16_t dram_lbu(struct dram *dram, xlenbits vaddr)
 {
-	assert(addr < dram->size);
-	return *(uint8_t*)(dram->image + addr);
+	xlenbits paddr = vaddr - dram->base;
+	assert(paddr < dram->size);
+	return *(uint8_t*)(dram->image + paddr);
 }
-static inline int16_t dram_lh(struct dram *dram, xlenbits addr)
+static inline int16_t dram_lh(struct dram *dram, xlenbits vaddr)
 {
-	assert(addr < dram->size);
-	return *(int16_t*)(dram->image + addr);
+	xlenbits paddr = vaddr - dram->base;
+	assert(paddr < dram->size);
+	return *(int16_t*)(dram->image + paddr);
 }
-static inline int16_t dram_lb(struct dram *dram, xlenbits addr)
+static inline int16_t dram_lb(struct dram *dram, xlenbits vaddr)
 {
-	assert(addr < dram->size);
-	return *(int8_t*)(dram->image + addr);
+	xlenbits paddr = vaddr - dram->base;
+	assert(paddr < dram->size);
+	return *(int8_t*)(dram->image + paddr);
 }
 
 static inline bool dram_is_in(struct dram *dram, xlenbits vaddr)
 {
-	return vaddr >= dram->base && (vaddr - dram->base) < dram->size;
+	return vaddr >= dram->base && vaddr < dram->base + dram->size;
 }
 
 static inline xlenbits dram_virt_to_phys(struct dram *dram, xlenbits vaddr)

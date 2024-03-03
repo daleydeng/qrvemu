@@ -307,19 +307,18 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 	for (int icount = 0; icount < inst_batch; icount++) {
 		core->mcycle.v += 1;
 		xlenbits pc = core->pc;
-		xlenbits ofs_pc = pc - plat->dram->base;
 
-		if (ofs_pc >= plat->dram->size) {
+		if (!dram_is_in(dram, pc)) {
 			handle_exception(core, E_Fetch_Access_Fault, pc);
 			return 0;
 		}
 
-		if (ofs_pc & 0x3) {
+		if (pc & 0x3) {
 			handle_exception(core, E_Fetch_Addr_Align, pc);
 			return 0;
 		}
 
-		xlenbits ir = dram_lw(dram, ofs_pc);
+		xlenbits ir = dram_lw(dram, pc);
 		ast_t inst = { .bits = ir };
 		core->next_pc = pc + 4;
 
@@ -399,56 +398,53 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 		{
 			regtype rs1 = rX(core, inst.I.rs1);
 			xlenbits imm = sign_ext(inst.I.imm, 12);
-			xlenbits rsval = rs1 + imm;
+			xlenbits vaddr = rs1 + imm;
 			xlenbits rval = 0;
 
-			rsval -= plat->dram->base;
-			if (rsval >= plat->dram->size - 3) {
-				rsval += plat->dram->base;
-				if (rsval >= 0x10000000 &&
-				    rsval < 0x12000000) // UART, CLNT
-				{
-					if (rsval ==
-					    0x1100bffc) // https://chromitem-soc.readthedocs.io/en/latest/clint.html
-						rval = core->mtime.high;
-					else if (rsval == 0x1100bff8)
-						rval = core->mtime.low;
-					else {
-						if (plat->load)
-							rval = plat->load(
-								plat, rsval);
-					}
-				} else {
-					handle_exception(core,
-							 E_Load_Access_Fault,
-							 rsval);
-					return 0;
-				}
-			} else {
+			if (dram_is_in(dram, vaddr)) {
 				switch ((ir >> 12) & 0x7) {
 				//LB, LH, LW, LBU, LHU
 				case 0:
-					rval = dram_lb(dram, rsval);
+					rval = dram_lb(dram, vaddr);
 					break;
 				case 1:
-					rval = dram_lh(dram, rsval);
+					rval = dram_lh(dram, vaddr);
 					break;
 				case 2:
-					rval = dram_lw(dram, rsval);
+					rval = dram_lw(dram, vaddr);
 					break;
 				case 4:
-					rval = dram_lbu(dram, rsval);
+					rval = dram_lbu(dram, vaddr);
 					break;
 				case 5:
-					rval = dram_lhu(dram, rsval);
+					rval = dram_lhu(dram, vaddr);
 					break;
 				default:
 					handle_exception(core, E_Illegal_Instr,
 							 inst.bits);
 					return 0;
 				}
+				wX(core, inst.I.rd, rval);
+				break;
 			}
 
+			if (vaddr >= 0x10000000 &&
+			    vaddr < 0x12000000) // UART, CLNT
+			{
+				// https://chromitem-soc.readthedocs.io/en/latest/clint.html
+				if (vaddr == 0x1100bffc)
+					rval = core->mtime.high;
+				else if (vaddr == 0x1100bff8)
+					rval = core->mtime.low;
+				else {
+					if (plat->load)
+						rval = plat->load(plat, vaddr);
+				}
+			} else {
+				handle_exception(core, E_Load_Access_Fault,
+						 vaddr);
+				return 0;
+			}
 			wX(core, inst.I.rd, rval);
 			break;
 		}
@@ -460,10 +456,11 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 					((ir & 0xfe000000) >> 20);
 			if (addy & 0x800)
 				addy |= 0xfffff000;
-			addy += rs1 - plat->dram->base;
+			addy += rs1 - dram->base;
+			xlenbits vaddr = addy + dram->base;
 
-			if (addy >= plat->dram->size - 3) {
-				addy += plat->dram->base;
+			if (addy >= dram->size - 3) {
+				addy += dram->base;
 				if (addy >= 0x10000000 && addy < 0x12000000) {
 					// Should be stuff like SYSCON, 8250, CLNT
 					if (addy == 0x11004004) //CLNT
@@ -496,13 +493,13 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 				switch ((ir >> 12) & 0x7) {
 				//SB, SH, SW
 				case 0:
-					dram_sb(dram, addy, rs2);
+					dram_sb(dram, vaddr, rs2);
 					break;
 				case 1:
-					dram_sh(dram, addy, rs2);
+					dram_sh(dram, vaddr, rs2);
 					break;
 				case 2:
-					dram_sw(dram, addy, rs2);
+					dram_sw(dram, vaddr, rs2);
 					break;
 				default:
 					handle_exception(core, E_Illegal_Instr,
@@ -693,16 +690,17 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			uint32_t irmid = (ir >> 27) & 0x1f;
 			xlenbits rval = 0;
 
-			rs1 -= plat->dram->base;
+			rs1 -= dram->base;
+			xlenbits vaddr = rs1 + dram->base;
 
 			// We don't implement load/store from UART or CLNT with RV32A here.
-			if (rs1 >= plat->dram->size - 3) {
+			if (rs1 >= dram->size - 3) {
 				handle_exception(core, E_SAMO_Access_Fault,
-						 rs1 + plat->dram->base);
+						 rs1 + dram->base);
 				return 0;
 			}
 
-			rval = dram_lw(dram, rs1);
+			rval = dram_lw(dram, vaddr);
 
 			// Referenced a little bit of https://github.com/franzflasch/riscv_em/blob/master/src/core/core.c
 			uint32_t write_mem = 1;
@@ -751,7 +749,7 @@ int step_rv32ima(struct platform *plat, uint64_t elapsed_us, int inst_batch)
 			}
 
 			if (write_mem)
-				dram_sw(dram, rs1, rs2);
+				dram_sw(dram, vaddr, rs2);
 
 			wX(core, inst.R.rd, rval);
 			break;

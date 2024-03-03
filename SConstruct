@@ -8,4 +8,6 @@ env.Command('rvemu.dtb', 'rvemu.dts', 'dtc -I dts -O dtb -o ${TARGET} ${SOURCE} 
 env.Command('run_q', ['q64mb.dtb', 'qrvemu'], './qrvemu -f kernel.img -b ${SOURCE}')
 env.Command('run_r', ['rvemu.dtb', 'qrvemu'], './qrvemu -f kernel.img -b ${SOURCE}')
 
+env.Command('debug_q', ['q64mb.dtb', 'qrvemu'], 'gdb --args ./qrvemu -f kernel.img -b ${SOURCE}')
+
 env.Default('qrvemu', 'q64mb.dtb', 'rvemu.dtb')
