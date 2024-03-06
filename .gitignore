@@ -5,6 +5,10 @@ kernel.img
 bin/
 compile_commands.json
 tmp/
+*.bin
+*.elf
+*.debug.txt
+
 *.dtb
 *.o
 .*

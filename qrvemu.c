@@ -119,17 +119,22 @@ int main(int argc, char **argv)
 		return 1;
 	}
 
+	bool has_dtb = true;
 	if (!dtb_file_name) {
-		fprintf(stderr,
-			"Error: Could not open dtb \"%s\"\n",
-			dtb_file_name);
-		return -9;
+		// fprintf(stderr,
+		// 	"Error: Could not open dtb \"%s\"\n",
+		// 	dtb_file_name);
+		has_dtb = false;
 	}
 
-	FILE *dtb_fp = fopen(dtb_file_name, "rb");
-	FILE *kernel_fp = fopen(image_file_name, "rb");
-
-	long dtb_len = get_file_size(dtb_fp);
+	long dtb_len = 0;
+	FILE *dtb_fp = NULL;
+	if (has_dtb) {
+		dtb_fp = fopen(dtb_file_name, "rb");
+		dtb_len = get_file_size(dtb_fp);
+	}
+			
+	FILE *img_fp = fopen(image_file_name, "rb");
 
 	RAM_SIZE += dtb_len;
 	struct dram *dram = calloc(1, sizeof(struct dram));
@@ -146,17 +151,18 @@ int main(int argc, char **argv)
 	long flen = 0;
 
 restart:
-	if ((flen = load_file(kernel_fp, dram->image, dram->size, false)) < 0)
+	if ((flen = load_file(img_fp, dram->image, dram->size, false)) < 0)
 		return flen;
-	fclose(kernel_fp);
+	fclose(img_fp);
 
+	if (has_dtb) {
+		if ((dtb_len = load_file(dtb_fp, dram->image, dram->size, true)) < 0)
+			return dtb_len;
+		fclose(dtb_fp);
+		if( kernel_command_line )
+			strncpy( (char*)(dram_end(dram) - dtb_len + 0xc0 ), kernel_command_line, 54 );
+	}
 
-	if ((dtb_len = load_file(dtb_fp, dram->image, dram->size, true)) < 0)
-	    return dtb_len;
-	fclose(dtb_fp);
-
-	if( kernel_command_line )
-		strncpy( (char*)(dram_end(dram) - dtb_len + 0xc0 ), kernel_command_line, 54 );
 
 	CaptureKeyboardInput();
 
